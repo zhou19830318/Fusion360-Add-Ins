@@ -1,10 +1,10 @@
-# AI Fusion — AI Copilot for Autodesk Fusion 360
+# Fusion360-Add-Ins — AI Copilot for Autodesk Fusion 360
 
-AI Fusion is a **native Fusion 360 add-in** that embeds a docked AI chat palette directly inside Fusion. Describe what you want to build in natural language — the AI drives the Fusion API to create sketches, extrusions, fillets, shells, holes, patterns, assemblies, and more.
+Fusion360-Add-Ins is a **native Fusion 360 add-in** that embeds a docked AI chat palette directly inside Fusion. Describe what you want to build in natural language — the AI drives the Fusion API to create sketches, extrusions, fillets, shells, holes, patterns, assemblies, and more.
 
 ## Demo Video
 Click the link below to view the AI Fusion demo:
-[c25926637e665985cc7f7c9c3a4c6ff0.mp4](https://github.com/zhou19830318/AIFusion/blob/main/c25926637e665985cc7f7c9c3a4c6ff0.mp4)
+[c25926637e665985cc7f7c9c3a4c6ff0.mp4](https://github.com/zhou19830318/Fusion360-Add-Ins/blob/main/c25926637e665985cc7f7c9c3a4c6ff0.mp4)
 
 ## Features
 
@@ -40,12 +40,12 @@ Click the link below to view the AI Fusion demo:
 
 ```powershell
 # Clone from GitHub
-git clone https://github.com/YOUR_USERNAME/AIFusion.git "$env:APPDATA\Autodesk\Autodesk Fusion 360\API\AddIns\AIFusion"
+git clone https://github.com/zhou19830318/Fusion360-Add-Ins.git "$env:APPDATA\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360-Add-Ins"
 ```
 
 Or download the ZIP, extract to:
 ```
-%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\AIFusion\
+%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360-Add-Ins\
 ```
 
 ### 2. Install Dependencies
@@ -53,7 +53,7 @@ Or download the ZIP, extract to:
 **Run as Administrator:**
 
 ```batch
-cd "%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\AIFusion"
+cd "%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360-Add-Ins"
 install_deps.bat
 ```
 
@@ -90,14 +90,14 @@ Open `local_server\config.json` and add at least one API key:
 ### 4. Enable in Fusion 360
 
 1. Fully quit Fusion 360 and restart
-2. Press `Shift+S` → **Add-Ins** tab → find **AIFusion**
+2. Press `Shift+S` → **Add-Ins** tab → find **Fusion360-Add-Ins**
 3. Click **Run**, then tick **Run on Startup**
 4. The AI Fusion panel appears docked on the right side
 
 ## Project Structure
 
 ```
-AIFusion/
+Fusion360-Add-Ins/
 ├── AIFusion.py                 # Add-in entry point (loaded by Fusion)
 ├── AIFusion.manifest            # Fusion add-in manifest
 ├── install_deps.bat             # Dependency installer (run once)
@@ -184,7 +184,7 @@ AI Fusion's system prompt contains verified Fusion API signatures for 15 operati
 1. Quit Fusion 360
 2. Delete the folder:
    ```
-   %APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\AIFusion
+   %APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360-Add-Ins
    ```
 3. Restart Fusion
 
