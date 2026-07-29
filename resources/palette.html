@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AI Fusion</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0b0b0e;
+        color: #f5f5f7;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      #loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        text-align: center;
+        padding: 20px;
+      }
+
+      .logo {
+        width: 64px;
+        height: auto;
+        animation: breathe 2.4s ease-in-out infinite;
+      }
+      @keyframes breathe {
+        0%, 100% { opacity: 0.55; transform: scale(0.96); }
+        50%      { opacity: 1;    transform: scale(1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .logo { animation: none; opacity: 0.8; }
+      }
+
+      #status-text {
+        font-size: 13px;
+        color: #9898a8;
+      }
+
+      #error-text {
+        display: none;
+        font-size: 12px;
+        color: #e0556a;
+        max-width: 280px;
+        line-height: 1.5;
+      }
+      #error-text a {
+        color: #fc7ab1;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      .spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #2a2a34;
+        border-top-color: #c12d9c;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div id="loading">
+      <svg class="logo" viewBox="0 0 3220 2871" xmlns="http://www.w3.org/2000/svg" aria-label="AI Fusion">
+        <path d="M2256.65 2484.03L2134.81 2049.39L2043.36 1725.22L1818.74 923.806L909.855 890.35L724.26 884.037C676.894 884.037 632.507 889.403 590.801 898.868C426.361 935.798 303.627 1035.23 222.002 1134.03C182.084 1182.64 152.592 1230.92 132.335 1271.65C110.588 1315.52 92.4161 1360.65 76.9257 1406.74L65.9034 1441.46C-20.7851 1735.32 16.1544 2070.54 193.106 2350.51C293.2 2509.6 434.107 2636.16 592.291 2722.34C769.838 2819.87 969.726 2865.96 1157.71 2848.91C1159.2 2848.91 1160.38 2848.91 1161.28 2848.91L1245.88 2836.6L2312.36 2683.51L2256.05 2483.4L2256.65 2484.03ZM874.699 1241.98C1083.82 1141.91 1351.64 1235.34 1501.78 1473.02C1597.7 1625.48 1623.91 1802.87 1585.78 1954.7C1561.95 2050.97 1511.91 2137.14 1437.73 2199.63C1429.09 2206.89 1420.15 2214.15 1410.32 2221.1C1195.54 2373.24 888.406 2285.49 723.664 2025.08C615.825 1854.01 596.164 1650.73 656.339 1488.49C688.214 1403.27 741.24 1329.41 815.119 1277.33C834.482 1263.43 853.842 1252.08 874.403 1242.29H874.699V1241.98Z" fill="#C12D9C"/>
+        <path d="M2100.58 1629.25C2084.49 1663.02 2065.42 1695.22 2043.68 1725.2L1818.76 923.781L910.175 890.646C951.583 774.801 1023.38 674.111 1123.17 603.407C1407.96 401.396 1815.79 517.868 2034.14 863.497C2075.85 929.468 2107.73 999.542 2129.77 1070.56C2190.24 1264.05 2178.33 1466.69 2100.58 1629.56V1629.25Z" fill="#C12D9C"/>
+        <path d="M3187.01 2350.84L2312.98 2684.16L2256.67 2484.05L3187.01 2350.84Z" fill="#C12D9C"/>
+        <path d="M2547.14 73.4439L2377.64 369.833L1602.2 200.017C1373.72 138.467 1134.51 170.346 937.59 310.176C857.159 366.676 790.133 437.064 736.512 517.554C721.021 540.595 706.722 563.952 693.615 588.258C642.674 682.95 608.415 788.375 591.137 899.485L590.541 902.003C588.754 914.003 586.966 926.629 585.775 938.933C584.285 949.666 583.094 960.398 582.2 970.818C581.307 979.97 580.412 989.443 580.114 998.908C578.923 1012.48 578.625 1025.74 578.328 1039.31C578.328 1049.73 578.03 1060.45 578.328 1071.19C578.328 1080.97 578.327 1090.76 578.923 1100.55C578.923 1111.59 579.519 1122.64 580.114 1133.69C580.71 1144.1 581.307 1154.52 582.498 1164.94C582.498 1170.93 583.391 1177.24 583.987 1183.56C585.477 1197.13 586.966 1211.02 588.754 1224.59L224.424 1230.27C222.636 1198.4 221.743 1166.51 222.338 1134.64C223.232 1003.33 242.297 873.279 278.641 748.604L288.77 714.83C309.622 649.177 335.242 585.101 365.627 523.55C457.976 336.059 712.084 24.2036 1131.23 21.9941L2547.14 73.4439Z" fill="#FC7AB1"/>
+      </svg>
+      <div class="spinner"></div>
+      <div id="status-text">Connecting to AI Fusion server…</div>
+      <div id="error-text">
+        <p>Could not connect to the AI Fusion server.</p>
+        <p>Make sure the add-in is running and Fusion is not in a disconnected state.</p>
+        <p><a onclick="location.reload()">Click here to retry</a></p>
+      </div>
+    </div>
+
+    <script>
+      // Retry connecting to the chat server until it's ready.
+      // If the server is not ready yet when the palette first opens,
+      // this prevents the browser's "ERR_CONNECTION_REFUSED" page
+      // from appearing — instead we show a friendly loading state.
+      //
+      // Override the target via localStorage from the palette web inspector:
+      //   localStorage.setItem("aifusion.chatUrl", "http://127.0.0.1:3001/chat");
+      //   location.reload();
+
+      (function() {
+        const FALLBACK = "http://127.0.0.1:8765/chat";
+        const target =
+          (window.localStorage && window.localStorage.getItem("aifusion.chatUrl")) ||
+          FALLBACK;
+
+        // Extract host + port from the target URL
+        function getOrigin(url) {
+          try {
+            var u = new URL(url);
+            return u.origin;
+          } catch(e) {
+            // Fallback for very old browsers
+            var m = url.match(/^https?:\/\/([^\/]+)/);
+            return m ? m[1] : "http://127.0.0.1:8765";
+          }
+        }
+
+        var origin = getOrigin(target);
+        var statusEl = document.getElementById("status-text");
+        var errorEl = document.getElementById("error-text");
+        var spinnerEl = document.querySelector(".spinner");
+        var retries = 0;
+        var MAX_RETRIES = 30;  // ~30 seconds
+
+        function tryConnect() {
+          retries++;
+          statusEl.textContent = "Connecting to AI Fusion server… (" + retries + "/" + MAX_RETRIES + ")";
+
+          var xhr = new XMLHttpRequest();
+          xhr.open("GET", origin + "/chat", true);
+          xhr.timeout = 2000;
+
+          xhr.onload = function() {
+            if (xhr.status >= 200 && xhr.status < 400) {
+              // Server is ready — redirect to chat UI
+              statusEl.textContent = "Connected! Loading…";
+              location.replace(target);
+            } else {
+              scheduleRetry();
+            }
+          };
+
+          xhr.onerror = function() {
+            scheduleRetry();
+          };
+
+          xhr.ontimeout = function() {
+            scheduleRetry();
+          };
+
+          xhr.send();
+        }
+
+        function scheduleRetry() {
+          if (retries >= MAX_RETRIES) {
+            // Give up — show error
+            if (spinnerEl) spinnerEl.style.display = "none";
+            statusEl.textContent = "Could not connect";
+            errorEl.style.display = "block";
+            return;
+          }
+          setTimeout(tryConnect, 1000);
+        }
+
+        // Start trying
+        tryConnect();
+      })();
+    </script>
+  </body>
+</html>

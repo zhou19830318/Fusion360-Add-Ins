@@ -1,0 +1,18 @@
+{
+  "provider": "",
+  "model": "",
+  "deepseek_api_key": "",
+  "deepseek_base_url": "https://api.deepseek.com",
+  "kimi_api_key": "",
+  "kimi_base_url": "https://api.moonshot.cn/v1",
+  "zhipu_api_key": "",
+  "zhipu_base_url": "https://open.bigmodel.cn/api/paas/v4",
+  "openai_api_key": "",
+  "openai_base_url": "https://api.openai.com/v1",
+  "anthropic_api_key": "",
+  "anthropic_base_url": "https://api.anthropic.com",
+  "google_api_key": "",
+  "google_base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+  "server_port": 8765,
+  "system_prompt": "You are AI Fusion, an AI copilot for Autodesk Fusion 360."
+}

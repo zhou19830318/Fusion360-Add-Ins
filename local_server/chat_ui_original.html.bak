@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Fusion</title>
+<style>
+  :root {
+    --bg: #0b0b0e;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a34;
+    --text: #e4e4ec;
+    --text2: #9898a8;
+    --accent: #c12d9c;
+    --accent2: #fc7ab1;
+    --user-bubble: #2a1a3a;
+    --tool-bg: #12121a;
+    --tool-border: #2a2a3a;
+    --error: #e0556a;
+    --success: #4caf93;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Layout ---- */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* ---- Header ---- */
+  #header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #header svg { width: 22px; height: 22px; flex-shrink: 0; }
+  #header .title { font-weight: 600; font-size: 13px; }
+  #header .badge {
+    margin-left: auto;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: var(--surface2);
+    color: var(--text2);
+    cursor: pointer;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  #header .badge:hover { background: var(--border); }
+  #header .badge.connected { color: var(--success); border-color: var(--success); }
+
+  /* ---- Messages ---- */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .msg {
+    max-width: 100%;
+    animation: msgIn 0.15s ease-out;
+  }
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg.user {
+    align-self: flex-end;
+    max-width: 88%;
+  }
+  .msg.user .bubble {
+    background: var(--user-bubble);
+    border: 1px solid #3a2050;
+    border-radius: var(--radius) var(--radius) 2px var(--radius);
+    padding: 8px 12px;
+    color: #e8d0f8;
+  }
+
+  .msg.assistant {
+    align-self: flex-start;
+    max-width: 92%;
+  }
+  .msg.assistant .bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) var(--radius) 2px;
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg.assistant .bubble p { margin: 0 0 6px; }
+  .msg.assistant .bubble p:last-child { margin-bottom: 0; }
+  .msg.assistant .bubble code {
+    background: var(--surface2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .msg.assistant .bubble pre {
+    background: var(--surface2);
+    padding: 8px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 11px;
+    margin: 6px 0;
+  }
+
+  /* Tool call card */
+  .tool-call {
+    align-self: flex-start;
+    max-width: 94%;
+    background: var(--tool-bg);
+    border: 1px solid var(--tool-border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .tool-call .tool-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .tool-call .tool-icon {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+  }
+  .tool-call .tool-name { font-weight: 600; color: var(--accent2); }
+  .tool-call .tool-subtype {
+    font-size: 10px; color: var(--text2); background: var(--surface2);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  .tool-call .tool-args {
+    color: var(--text2);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tool-call .tool-result {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: var(--surface);
+    border-radius: 6px;
+    font-size: 11px;
+    max-height: 160px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+  .tool-call .tool-result.error { color: var(--error); border-color: #4a2030; }
+  .tool-call .tool-result.ok { color: var(--success); }
+
+  .tool-indicator {
+    color: var(--text2);
+    font-size: 11px;
+    font-style: italic;
+    padding: 4px 0;
+  }
+
+  /* ---- Input ---- */
+  #input-area {
+    flex-shrink: 0;
+    padding: 8px 10px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  #input-area form {
+    display: flex;
+    gap: 6px;
+  }
+  #prompt {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    min-height: 36px;
+    max-height: 120px;
+    line-height: 1.4;
+  }
+  #prompt:focus { border-color: var(--accent); }
+  #prompt::placeholder { color: var(--text2); }
+
+  #send-btn {
+    flex-shrink: 0;
+    width: 36px; height: 36px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  #send-btn:hover { background: var(--accent2); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #send-btn svg { width: 16px; height: 16px; }
+
+  /* ---- Settings panel ---- */
+  #settings {
+    display: none;
+    position: absolute; top: 44px; bottom: 60px; left: 0; right: 0;
+    background: var(--bg);
+    z-index: 10; overflow-y: auto; padding: 16px;
+    flex-direction: column; gap: 12px;
+  }
+  #settings.open { display: flex; }
+  #settings label {
+    font-size: 11px; color: var(--text2); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: -8px;
+  }
+  #settings select, #settings input, #settings textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    width: 100%;
+  }
+  #settings select:focus, #settings input:focus, #settings textarea:focus {
+    border-color: var(--accent); outline: none;
+  }
+  #settings textarea { min-height: 80px; resize: vertical; font-size: 12px; }
+  #settings .btn-row { display: flex; gap: 8px; }
+  #settings .btn {
+    flex: 1; padding: 8px; border: none; border-radius: 6px;
+    font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  #settings .btn.save { background: var(--accent); color: #fff; }
+  #settings .btn.save:hover { background: var(--accent2); }
+  #settings .btn.cancel { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+  /* ---- Status bar ---- */
+  #status {
+    display: none;
+    padding: 4px 12px;
+    background: #1a1020;
+    border-top: 1px solid #3a2050;
+    font-size: 11px;
+    color: var(--text2);
+    text-align: center;
+    flex-shrink: 0;
+  }
+  #status.visible { display: block; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Empty state */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: var(--text2); text-align: center; gap: 8px;
+    padding: 20px;
+  }
+  .empty-state svg { width: 48px; height: 48px; opacity: 0.5; margin-bottom: 8px; }
+  .empty-state h2 { font-size: 15px; font-weight: 600; color: var(--text); }
+  .empty-state p { font-size: 12px; max-width: 240px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <div id="header">
+    <svg viewBox="0 0 3220 2871" xmlns="http://www.w3.org/2000/svg" aria-label="AI Fusion">
+      <path d="M2256.65 2484.03L2134.81 2049.39L2043.36 1725.22L1818.74 923.806L909.855 890.35L724.26 884.037C676.894 884.037 632.507 889.403 590.801 898.868C426.361 935.798 303.627 1035.23 222.002 1134.03C182.084 1182.64 152.592 1230.92 132.335 1271.65C110.588 1315.52 92.4161 1360.65 76.9257 1406.74L65.9034 1441.46C-20.7851 1735.32 16.1544 2070.54 193.106 2350.51C293.2 2509.6 434.107 2636.16 592.291 2722.34C769.838 2819.87 969.726 2865.96 1157.71 2848.91C1159.2 2848.91 1160.38 2848.91 1161.28 2848.91L1245.88 2836.6L2312.36 2683.51L2256.05 2483.4L2256.65 2484.03ZM874.699 1241.98C1083.82 1141.91 1351.64 1235.34 1501.78 1473.02C1597.7 1625.48 1623.91 1802.87 1585.78 1954.7C1561.95 2050.97 1511.91 2137.14 1437.73 2199.63C1429.09 2206.89 1420.15 2214.15 1410.32 2221.1C1195.54 2373.24 888.406 2285.49 723.664 2025.08C615.825 1854.01 596.164 1650.73 656.339 1488.49C688.214 1403.27 741.24 1329.41 815.119 1277.33C834.482 1263.43 853.842 1252.08 874.403 1242.29H874.699V1241.98Z" fill="#C12D9C"/>
+      <path d="M2100.58 1629.25C2084.49 1663.02 2065.42 1695.22 2043.68 1725.2L1818.76 923.781L910.175 890.646C951.583 774.801 1023.38 674.111 1123.17 603.407C1407.96 401.396 1815.79 517.868 2034.14 863.497C2075.85 929.468 2107.73 999.542 2129.77 1070.56C2190.24 1264.05 2178.33 1466.69 2100.58 1629.56V1629.25Z" fill="#C12D9C"/>
+      <path d="M3187.01 2350.84L2312.98 2684.16L2256.67 2484.05L3187.01 2350.84Z" fill="#C12D9C"/>
+      <path d="M2547.14 73.4439L2377.64 369.833L1602.2 200.017C1373.72 138.467 1134.51 170.346 937.59 310.176C857.159 366.676 790.133 437.064 736.512 517.554C721.021 540.595 706.722 563.952 693.615 588.258C642.674 682.95 608.415 788.375 591.137 899.485L590.541 902.003C588.754 914.003 586.966 926.629 585.775 938.933C584.285 949.666 583.094 960.398 582.2 970.818C581.307 979.97 580.412 989.443 580.114 998.908C578.923 1012.48 578.625 1025.74 578.328 1039.31C578.328 1049.73 578.03 1060.45 578.328 1071.19C578.328 1080.97 578.327 1090.76 578.923 1100.55C578.923 1111.59 579.519 1122.64 580.114 1133.69C580.71 1144.1 581.307 1154.52 582.498 1164.94C582.498 1170.93 583.391 1177.24 583.987 1183.56C585.477 1197.13 586.966 1211.02 588.754 1224.59L224.424 1230.27C222.636 1198.4 221.743 1166.51 222.338 1134.64C223.232 1003.33 242.297 873.279 278.641 748.604L288.77 714.83C309.622 649.177 335.242 585.101 365.627 523.55C457.976 336.059 712.084 24.2036 1131.23 21.9941L2547.14 73.4439Z" fill="#FC7AB1"/>
+    </svg>
+    <span class="title">AI Fusion</span>
+    <span id="model-badge" class="badge" title="Open settings">⚙ deepseek</span>
+  </div>
+
+  <!-- Messages area -->
+  <div id="messages">
+    <div class="empty-state" id="empty-state">
+      <svg viewBox="0 0 3220 2871" xmlns="http://www.w3.org/2000/svg" style="width:48px;height:48px;opacity:0.5">
+        <path d="M2256.65 2484.03L2134.81 2049.39L2043.36 1725.22L1818.74 923.806L909.855 890.35L724.26 884.037C676.894 884.037 632.507 889.403 590.801 898.868C426.361 935.798 303.627 1035.23 222.002 1134.03C182.084 1182.64 152.592 1230.92 132.335 1271.65C110.588 1315.52 92.4161 1360.65 76.9257 1406.74L65.9034 1441.46C-20.7851 1735.32 16.1544 2070.54 193.106 2350.51C293.2 2509.6 434.107 2636.16 592.291 2722.34C769.838 2819.87 969.726 2865.96 1157.71 2848.91C1159.2 2848.91 1160.38 2848.91 1161.28 2848.91L1245.88 2836.6L2312.36 2683.51L2256.05 2483.4L2256.65 2484.03Z" fill="#C12D9C"/>
+      </svg>
+      <h2>AI Fusion</h2>
+      <p>Describe what you want to create or change in your Fusion 360 design.</p>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div id="status">Thinking...</div>
+
+  <!-- Input -->
+  <div id="input-area">
+    <form id="chat-form" autocomplete="off">
+      <textarea id="prompt" rows="1" placeholder="Describe what you want to do..."
+        spellcheck="false"></textarea>
+      <button id="send-btn" type="submit" title="Send (Enter)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+  <!-- Settings overlay -->
+  <div id="settings">
+    <label>Provider</label>
+    <select id="cfg-provider">
+      <option value="deepseek">DeepSeek</option>
+      <option value="kimi">Kimi (Moonshot)</option>
+    </select>
+
+    <label>Model</label>
+    <select id="cfg-model">
+      <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+      <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+    </select>
+
+    <label>DeepSeek API Key</label>
+    <input type="password" id="cfg-deepseek-key" placeholder="sk-..." />
+
+    <label>DeepSeek Base URL</label>
+    <input type="text" id="cfg-deepseek-url" placeholder="https://api.deepseek.com" />
+
+    <label>Kimi API Key</label>
+    <input type="password" id="cfg-kimi-key" placeholder="sk-..." />
+
+    <label>Kimi Base URL</label>
+    <input type="text" id="cfg-kimi-url" placeholder="https://api.moonshot.cn/v1" />
+
+    <label>System Prompt</label>
+    <textarea id="cfg-system-prompt" placeholder="System instructions for the AI..."></textarea>
+
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn cancel" id="settings-cancel">Cancel</button>
+      <button class="btn save" id="settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =========================================================================
+// AI Fusion Chat UI
+//
+// This page runs as the Fusion 360 palette's primary document. It talks to
+// the local server (server.py) for AI model calls and to the Fusion add-in
+// via adsk.fusionSendData for tool execution.
+// =========================================================================
+
+(function () {
+  "use strict";
+
+  // ---- DOM refs ----------------------------------------------------------
+  const messagesEl = document.getElementById("messages");
+  const emptyState = document.getElementById("empty-state");
+  const statusEl = document.getElementById("status");
+  const promptEl = document.getElementById("prompt");
+  const formEl = document.getElementById("chat-form");
+  const sendBtn = document.getElementById("send-btn");
+  const modelBadge = document.getElementById("model-badge");
+  const settingsEl = document.getElementById("settings");
+
+  // ---- State -------------------------------------------------------------
+  /** @type {Array<{role:string, content:string|null, tool_calls?:Array, tool_call_id?:string, name?:string}>} */
+  let conversation = [];
+  let isProcessing = false;
+
+  // ---- Fusion bridge detection -------------------------------------------
+  // IMPORTANT: Qt WebEngine injects 'adsk' ASYNC after page load (~100-500ms).
+  // We use a deferred polling approach instead of a synchronous const.
+  let _hasFusionBridge = false;
+  let _bridgeCallbacks = [];
+
+  function _detectBridge(callback) {
+    if (typeof adsk !== "undefined" && adsk.fusionSendData) {
+      if (!_hasFusionBridge) {
+        _hasFusionBridge = true;
+        console.log("[aifusion] Fusion bridge detected.");
+        // Re-run setup now that adsk is available
+        setupFusionEventListener();
+        _bridgeCallbacks.forEach(cb => cb(true));
+        _bridgeCallbacks = [];
+      }
+      if (callback) callback(true);
+      return true;
+    }
+    if (callback) _bridgeCallbacks.push(callback);
+    return false;
+  }
+
+  // Try detecting adsk immediately, then poll with backoff for up to 3s
+  function _startBridgeDetection() {
+    if (_detectBridge()) return;
+    let retries = 0;
+    const maxRetries = 30;
+    function poll() {
+      retries++;
+      if (_detectBridge()) return;
+      if (retries >= maxRetries) {
+        console.log("[aifusion] Fusion bridge NOT detected after 3s — standalone mode.");
+        _bridgeCallbacks.forEach(cb => cb(false));
+        _bridgeCallbacks = [];
+        return;
+      }
+      // Exponential backoff: 50, 75, 112, 169, 254, ... ≈ 3s total for 30 tries
+      const delay = Math.min(50 * Math.pow(1.5, retries - 1), 300);
+      setTimeout(poll, delay);
+    }
+    setTimeout(poll, 50);
+  }
+
+  // ---- API helpers -------------------------------------------------------
+  const API_BASE = window.location.origin;
+
+  async function apiCall(method, path, body) {
+    const opts = { method, headers: { "Content-Type": "application/json" } };
+    if (body) opts.body = JSON.stringify(body);
+    const resp = await fetch(API_BASE + path, opts);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    return data;
+  }
+
+  // ---- Fusion bridge -----------------------------------------------------
+  /**
+   * Send a tool call to Fusion and get the result.
+   * @param {string} toolName - read | create | update | delete | execute
+   * @param {object} args
+   * @returns {Promise<object>}
+   */
+  function callFusionTool(toolName, args) {
+    // If adsk isn't available yet, wait up to 3s (Qt WebEngine injects it async)
+    if (typeof adsk === "undefined" || !adsk.fusionSendData) {
+      return new Promise((resolve) => {
+        let waited = 0;
+        const step = 100;
+        function wait() {
+          waited += step;
+          if (typeof adsk !== "undefined" && adsk.fusionSendData) {
+            _hasFusionBridge = true;
+            console.log("[aifusion] Bridge appeared mid-call — executing tool.");
+            resolve(_doFusionToolCall(toolName, args));
+          } else if (waited >= 3000) {
+            console.log("[aifusion] Bridge not available after 3s — standalone mode.");
+            resolve({
+              _mock: true,
+              message: `[Standalone mode] Tool "${toolName}" called with: ${JSON.stringify(args)}.`,
+            });
+          } else {
+            setTimeout(wait, step);
+          }
+        }
+        wait();
+      });
+    }
+    return _doFusionToolCall(toolName, args);
+  }
+
+  function _doFusionToolCall(toolName, args) {
+    _hasFusionBridge = true;
+    // IMPORTANT: The execute handler expects args in format:
+    // {featureType: "script", object: {script: "def run(_context):\n    ..."}}
+    // NOT directly {featureType: "script", script: "..."}
+    let bridgeArgs = args;
+    if (toolName === "execute" && args.featureType) {
+      bridgeArgs = { featureType: args.featureType };
+      if (args.featureType === "script") {
+        bridgeArgs.object = { script: args.script || "" };
+      } else if (args.featureType === "document") {
+        bridgeArgs.object = { action: args.action || "" };
+      } else if (args.featureType === "object") {
+        bridgeArgs.object = { fileId: args.fileId || "" };
+      }
+    }
+    return new Promise((resolve, reject) => {
+      try {
+        const payload = JSON.stringify({
+          name: toolName,
+          args: bridgeArgs,
+        });
+        const result = adsk.fusionSendData("tool.call", payload);
+        if (result && typeof result.then === "function") {
+          result.then((data) => {
+            try { resolve(JSON.parse(data)); }
+            catch { resolve({ raw: data }); }
+          }).catch(reject);
+        } else {
+          try { resolve(JSON.parse(result)); }
+          catch { resolve({ raw: result }); }
+        }
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  // ---- Rendering ---------------------------------------------------------
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function hideEmptyState() {
+    if (emptyState) emptyState.style.display = "none";
+  }
+
+  function setStatus(text) {
+    statusEl.textContent = text;
+    statusEl.classList.add("visible");
+  }
+
+  function clearStatus() {
+    statusEl.classList.remove("visible");
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  /**
+   * Render a simple Markdown-like string to HTML.
+   * Supports: paragraphs, inline code, code blocks (```), bold (**), italic (*).
+   */
+  function renderMarkdown(text) {
+    if (!text) return "";
+    let html = escapeHtml(text);
+
+    // Code blocks
+    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+      return `<pre><code>${code.trim()}</code></pre>`;
+    });
+
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+    // Italic
+    html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+
+    // Paragraphs (double newline)
+    html = html.split(/\n\n+/).map(p => `<p>${p.trim()}</p>`).join("");
+
+    // Single newlines to <br> within paragraphs
+    html = html.replace(/\n/g, "<br>");
+
+    return html;
+  }
+
+  function addMessageEl(role, html) {
+    hideEmptyState();
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    div.innerHTML = `<div class="bubble">${html}</div>`;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  function addToolCallEl(toolName, args, result, isError) {
+    hideEmptyState();
+    const div = document.createElement("div");
+    div.className = "tool-call";
+
+    // Build args preview
+    let argsPreview = "";
+    if (toolName === "execute" && args.featureType === "script" && args.script) {
+      const scriptPreview = args.script.length > 200
+        ? args.script.slice(0, 200) + "…"
+        : args.script;
+      argsPreview = `script: ${escapeHtml(scriptPreview)}`;
+    } else {
+      const argsStr = JSON.stringify(args);
+      argsPreview = argsStr.length > 150
+        ? argsStr.slice(0, 150) + "…"
+        : argsStr;
+    }
+
+    // Build result display
+    let resultHtml = "";
+    const resultClass = isError ? "error" : "ok";
+    if (typeof result === "string") {
+      // Check if it looks like stdout output
+      if (result.includes("\\n") && result.length > 20) {
+        resultHtml = `<pre style="margin:0;white-space:pre-wrap;font-size:11px;max-height:200px;overflow-y:auto;">${escapeHtml(result)}</pre>`;
+      } else {
+        resultHtml = escapeHtml(result);
+      }
+    } else {
+      resultHtml = escapeHtml(JSON.stringify(result, null, 2));
+    }
+
+    div.innerHTML = `
+      <div class="tool-header">
+        <span class="tool-icon">${toolName === "execute" ? "⚡" : "🔧"}</span>
+        <span class="tool-name">${escapeHtml(toolName)}</span>
+        ${args.featureType ? `<span class="tool-subtype">${escapeHtml(args.featureType)}</span>` : ""}
+      </div>
+      <div class="tool-args">${argsPreview}</div>
+      <div class="tool-result ${resultClass}">${resultHtml}</div>
+    `;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  function addThinkingEl(text) {
+    hideEmptyState();
+    const div = document.createElement("div");
+    div.className = "tool-indicator";
+    div.textContent = text;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  // ---- Conversation loop ------------------------------------------------
+  async function sendMessage(userText) {
+    if (isProcessing || !userText.trim()) return;
+    isProcessing = true;
+    sendBtn.disabled = true;
+    setStatus("Thinking...");
+
+    // Add user message to conversation and UI
+    conversation.push({ role: "user", content: userText });
+    addMessageEl("user", escapeHtml(userText));
+
+    try {
+      await runConversationLoop();
+    } catch (err) {
+      console.error("[aifusion] Conversation error:", err);
+      addMessageEl("assistant",
+        `<span style="color:var(--error)">Error: ${escapeHtml(err.message)}</span>`);
+    } finally {
+      clearStatus();
+      isProcessing = false;
+      sendBtn.disabled = false;
+      promptEl.focus();
+    }
+  }
+
+  async function runConversationLoop() {
+    const MAX_TOOL_ROUNDS = 10;
+    let round = 0;
+
+    while (round < MAX_TOOL_ROUNDS) {
+      round++;
+
+      // Call the AI via our local server
+      const response = await apiCall("POST", "/api/chat", {
+        messages: conversation,
+      });
+
+      const choice = response.choices?.[0];
+      if (!choice) throw new Error("No response from AI");
+
+      const msg = choice.message;
+
+      // ---- AI returned a text response (no tool calls) ----
+      if (msg.content && !msg.tool_calls) {
+        conversation.push({ role: "assistant", content: msg.content });
+        addMessageEl("assistant", renderMarkdown(msg.content));
+        return; // Done!
+      }
+
+      // ---- AI returned tool calls ----
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        // Add assistant message with tool_calls to conversation
+        conversation.push({
+          role: "assistant",
+          content: msg.content || null,
+          tool_calls: msg.tool_calls,
+        });
+
+        // Execute each tool call
+        for (const tc of msg.tool_calls) {
+          const toolName = tc.function.name;
+          let args;
+          try {
+            args = JSON.parse(tc.function.arguments || "{}");
+          } catch {
+            args = {};
+          }
+
+          setStatus(`Running ${toolName}...`);
+          const thinkingEl = addThinkingEl(`Running ${toolName}…`);
+
+          let result;
+          let isError = false;
+          try {
+            result = await callFusionTool(toolName, args);
+          } catch (err) {
+            result = `Error: ${err.message}`;
+            isError = true;
+          }
+
+          // Remove thinking indicator, add result card
+          thinkingEl.remove();
+          addToolCallEl(toolName, args, result, isError);
+
+          // Add tool result to conversation
+          conversation.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            name: toolName,
+            content: typeof result === "string" ? result : JSON.stringify(result),
+          });
+        }
+
+        setStatus("Thinking...");
+        continue; // Loop again — AI may have more tool calls or final answer
+      }
+
+      // ---- AI returned only content (fallback) ----
+      if (msg.content) {
+        conversation.push({ role: "assistant", content: msg.content });
+        addMessageEl("assistant", renderMarkdown(msg.content));
+        return;
+      }
+
+      // ---- Empty response ----
+      throw new Error("AI returned an empty response");
+    }
+
+    // Max rounds reached — ask AI to summarize
+    conversation.push({
+      role: "user",
+      content: "Please summarize what you've done so far based on the tool results above.",
+    });
+    const finalResp = await apiCall("POST", "/api/chat", { messages: conversation });
+    const finalContent = finalResp.choices?.[0]?.message?.content || "Done.";
+    conversation.push({ role: "assistant", content: finalContent });
+    addMessageEl("assistant", renderMarkdown(finalContent));
+  }
+
+  // ---- Selection events from Fusion ------------------------------------
+  /**
+   * Listen for selection.changed events pushed by selection_watcher.pyc.
+   * We don't actively do anything with them here, but the conversation
+   * history may reference selection state. We log them for debugging.
+   */
+  function setupFusionEventListener() {
+    // Qt WebView path: adsk.fusionDataReceived event
+    if (typeof adsk !== "undefined" && adsk.fusionDataReceived) {
+      try {
+        adsk.fusionDataReceived.remove();  // avoid duplicate handlers
+      } catch {}
+      try {
+        adsk.fusionDataReceived.add((htmlArgs) => {
+          if (htmlArgs.action === "selection.changed") {
+            try {
+              const data = JSON.parse(htmlArgs.data);
+              console.log("[aifusion] Selection changed:", data);
+            } catch {}
+          }
+        });
+        return;
+      } catch {}
+    }
+
+    // Legacy path: window-level event
+    try {
+      window.removeEventListener("fusionDataReceived", _onFusionEvent);
+      window.addEventListener("fusionDataReceived", _onFusionEvent);
+    } catch {}
+  }
+
+  function _onFusionEvent(e) {
+    if (e.detail?.action === "selection.changed") {
+      console.log("[aifusion] Selection changed:", e.detail);
+    }
+  }
+
+  // ---- Settings ---------------------------------------------------------
+  async function loadSettings() {
+    try {
+      const cfg = await apiCall("GET", "/api/config");
+      document.getElementById("cfg-provider").value = cfg.provider || "deepseek";
+      document.getElementById("cfg-deepseek-key").value = cfg.deepseek_api_key || "";
+      document.getElementById("cfg-deepseek-url").value = cfg.deepseek_base_url || "https://api.deepseek.com";
+      document.getElementById("cfg-kimi-key").value = cfg.kimi_api_key || "";
+      document.getElementById("cfg-kimi-url").value = cfg.kimi_base_url || "https://api.moonshot.cn/v1";
+      document.getElementById("cfg-system-prompt").value = cfg.system_prompt || "";
+      updateModelSelect(cfg.provider || "deepseek", cfg.model || "deepseek-v4-flash");
+      updateBadge(cfg);
+    } catch (err) {
+      console.warn("[aifusion] Could not load settings:", err);
+    }
+  }
+
+  function updateModelSelect(provider, currentModel) {
+    const sel = document.getElementById("cfg-model");
+    sel.innerHTML = "";
+    const models = provider === "kimi"
+      ? ["moonshot-v1-auto", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+      : ["deepseek-v4-flash", "deepseek-v4-pro"];
+    models.forEach(m => {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      if (m === currentModel) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  function updateBadge(cfg) {
+    const provider = cfg.provider || "deepseek";
+    const model = cfg.model || "deepseek-v4-flash";
+    modelBadge.textContent = `⚙ ${provider}/${model}`;
+    modelBadge.classList.toggle("connected", !!(cfg.deepseek_api_key || cfg.kimi_api_key));
+  }
+
+  async function saveSettings() {
+    const updates = {
+      provider: document.getElementById("cfg-provider").value,
+      model: document.getElementById("cfg-model").value,
+      deepseek_api_key: document.getElementById("cfg-deepseek-key").value,
+      deepseek_base_url: document.getElementById("cfg-deepseek-url").value,
+      kimi_api_key: document.getElementById("cfg-kimi-key").value,
+      kimi_base_url: document.getElementById("cfg-kimi-url").value,
+      system_prompt: document.getElementById("cfg-system-prompt").value,
+    };
+    try {
+      await apiCall("POST", "/api/config", updates);
+      updateBadge(updates);
+      updateModelSelect(updates.provider, updates.model);
+      settingsEl.classList.remove("open");
+      // Clear conversation since model/provider changed
+      conversation = [];
+      messagesEl.querySelectorAll(".msg, .tool-call, .tool-indicator").forEach(el => el.remove());
+      if (emptyState) emptyState.style.display = "";
+    } catch (err) {
+      alert("Failed to save settings: " + err.message);
+    }
+  }
+
+  // ---- Event handlers ---------------------------------------------------
+  formEl.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = promptEl.value.trim();
+    if (!text || isProcessing) return;
+    promptEl.value = "";
+    promptEl.style.height = "auto";
+    sendMessage(text);
+  });
+
+  // Enter to send, Shift+Enter for newline
+  promptEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      formEl.dispatchEvent(new Event("submit"));
+    }
+  });
+
+  // Auto-resize textarea
+  promptEl.addEventListener("input", () => {
+    promptEl.style.height = "auto";
+    promptEl.style.height = Math.min(promptEl.scrollHeight, 120) + "px";
+  });
+
+  // Settings toggle
+  modelBadge.addEventListener("click", () => {
+    if (settingsEl.classList.contains("open")) {
+      settingsEl.classList.remove("open");
+    } else {
+      loadSettings();
+      settingsEl.classList.add("open");
+    }
+  });
+
+  document.getElementById("settings-cancel").addEventListener("click", () => {
+    settingsEl.classList.remove("open");
+  });
+
+  document.getElementById("settings-save").addEventListener("click", saveSettings);
+
+  document.getElementById("cfg-provider").addEventListener("change", function () {
+    updateModelSelect(this.value, "");
+  });
+
+  // ---- Init -------------------------------------------------------------
+  function init() {
+    // Set up legacy event listener immediately (window-level fallback)
+    setupFusionEventListener();
+
+    // Start deferred Fusion bridge detection (Qt WebEngine injects adsk async)
+    _startBridgeDetection();
+
+    // Load current config for badge
+    (async () => {
+      try {
+        const cfg = await apiCall("GET", "/api/config");
+        updateBadge(cfg);
+      } catch {}
+    })();
+
+    console.log("[aifusion] Chat UI initialized — waiting for Fusion bridge...");
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

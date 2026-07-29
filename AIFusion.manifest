@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "addin",
+  "id": "aifusion-addin",
+  "author": "AiFusion",
+  "description": {
+    "": "AiFusion – AI Copilot for Fusion 360. General-purpose CAD assistant that drives the Fusion API via natural language."
+  },
+  "version": "1.0.0",
+  "runOnStartup": true,
+  "supportedOS": "windows|mac",
+  "editEnabled": false
+}

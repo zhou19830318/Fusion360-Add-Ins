@@ -1,0 +1,64 @@
+e.Application.get() des = adsk.fusion.Design.cast(app.activeProduct) root = des.rootComponent #…
+{
+  "ok": true,
+  "payload": {
+    "success": false,
+    "error": "Unhandled exception in run():\nTraceback (most recent call last):\n  File \"handlers/execute.py\", line 73, in _script\n  File \"<adam-script>\", line 161, in run\n  File \"<adam-script>\", line 88, in side_cut\n  File \"C:\\Users/aguo/AppData/Local/Autodesk/webdeploy/production/9c5312dfff2e4569cd1d269973ddf11cb999f782/Api/Python/packages\\adsk\\fusion.py\", line 33859, in _set_participantBodies\n    return _fusion.ExtrudeFeatureInput__set_participantBodies(self, value)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^\nTypeError: in method 'ExtrudeFeatureInput__set_participantBodies', argument 2 of type 'std::vector< adsk::core::Ptr< adsk::fusion::BRepBody >,std::allocator< adsk::core::Ptr< adsk::fusion::BRepBody > > > const &'\n",
+    "stdout": "LOWER SHELL\nOuter: 15952.8\nBosses: 6161.3\n\nLOWER: 6134.4 mm3\n\nUPPER SHELL\nOuter: 14779.8\nCavity: 5776.1\n",
+    "stderr": ""
+  }
+}
+⚡
+execute
+script
+script: def run(_context): import adsk.core, adsk.fusion, traceback, math app = adsk.core.Application.get() des = adsk.fusion.Design.cast(app.activeProduct) root = des.rootComponent #…
+{
+  "ok": true,
+  "payload": {
+    "success": false,
+    "error": "Unhandled exception in run():\nTraceback (most recent call last):\n  File \"handlers/execute.py\", line 73, in _script\n  File \"<adam-script>\", line 168, in run\n  File \"<adam-script>\", line 158, in do_side_cut\n  File \"C:\\Users/aguo/AppData/Local/Autodesk/webdeploy/production/9c5312dfff2e4569cd1d269973ddf11cb999f782/Api/Python/packages\\adsk\\fusion.py\", line 33859, in _set_participantBodies\n    return _fusion.ExtrudeFeatureInput__set_participantBodies(self, value)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^\nTypeError: in method 'ExtrudeFeatureInput__set_participantBodies', argument 2 of type 'std::vector< adsk::core::Ptr< adsk::fusion::BRepBody >,std::allocator< adsk::core::Ptr< adsk::fusion::BRepBody > > > const &'\n",
+    "stdout": "LOWER SHELL\n1 Outer: 15952.8\n2 Bosses: 6161.3\n\nLOWER: 6134.4 mm3\n\nUPPER SHELL\n1 Outer: 14779.8\n2 Cavity: 5776.1\n",
+    "stderr": ""
+  }
+}
+⚡
+execute
+script
+script: def run(_context): import adsk.core, adsk.fusion, traceback, math app = adsk.core.Application.get() des = adsk.fusion.Design.cast(app.activeProduct) root = des.rootComponent f…
+{
+  "ok": true,
+  "payload": {
+    "success": false,
+    "error": "Unhandled exception in run():\nTraceback (most recent call last):\n  File \"handlers/execute.py\", line 73, in _script\n  File \"<adam-script>\", line 155, in run\n  File \"<adam-script>\", line 87, in side_cut_profiles\n  File \"C:\\Users/aguo/AppData/Local/Autodesk/webdeploy/production/9c5312dfff2e4569cd1d269973ddf11cb999f782/Api/Python/packages\\adsk\\fusion.py\", line 34093, in add\n    return _fusion.ExtrudeFeatures_add(self, input)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^\nRuntimeError: 3 : 未找到要剪切或相交的目标实体！\n",
+    "stdout": "LOWER SHELL\n1 Outer: 15952.8\n2 Bosses: 6161.3\n\nLOWER: 6134.4 mm3\n\nUPPER SHELL\n1 Outer: 14779.8\n2 Cavity: 5776.1\n",
+    "stderr": ""
+  }
+}
+⚡
+execute
+script
+script: def run(_context): import adsk.core, adsk.fusion, traceback, math app = adsk.core.Application.get() des = adsk.fusion.Design.cast(app.activeProduct) root = des.rootComponent f…
+{
+  "ok": true,
+  "payload": {
+    "success": true,
+    "message": "Script executed",
+    "stdout": "LOWER SHELL\n1 Outer: 15952.8\n2 Bosses: 6161.3\n\nLOWER: 6134.4 mm3\n\nUPPER SHELL\n1 Outer: 14779.8\n  Buttons FAILED: 3 : 未找到要剪切或相交的目标实体！\n  USB FAILED: 3 : 未找到要剪切或相交的目标实体！\n2 Cavity: 5862.6\n\nUPPER: 4803.1 mm3\n\n==================================================\nLOWER: 6134.4 mm3\nUPPER: 4803.1 mm3\nTOTAL: 10937.5 mm3\n==================================================\nDONE!\n",
+    "stderr": ""
+  }
+}
+## 当前状态总结
+
+### ✅ 已完成
+| 部件 | 体积 | 状态 |
+|------|------|------|
+| 下壳 (LowerShell) | ~6,134 mm³ | ✅ 含外壳、内腔、螺钉柱、支撑台阶、SD槽、底部通风槽 |
+| 上壳 (UpperShell) | ~4,803 mm³ | ✅ 含外壳、内腔、排针窗口、MIC/LED孔、顶部通风槽、螺钉孔 |
+
+### ❌ 遇到的问题
+侧向开孔失败（按钮孔和USB-C孔在Y=32背面墙上）：
+- 使用constructionPlane + 侧向挤出（Y方向）时，Fusion提示_"未找到要剪切或相交的目标实体"_
+- 原因是Fusion的挤出始终垂直于草图平面（Z方向），从XZ偏置平面做Y方向挤出找不到目标体
+
+### 🔧 修复方案
+改用Tool Body方法——创建辅助实体（圆柱/方块）作为切割工具，用Combine/cut操作来在侧壁挖孔。这比侧向挤出更可靠。让我立即修复：

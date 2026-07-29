@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Fusion — Multi-Provider</title>
+<style>
+  /* ===== dark theme ===== */
+  :root {
+    --bg: #0b0b0e;
+    --surface: #16161a;
+    --surface2: #1e1e24;
+    --border: #2a2a34;
+    --text: #e4e4ec;
+    --text2: #9898a8;
+    --accent: #c12d9c;
+    --accent2: #fc7ab1;
+    --user-bubble: #2a1a3a;
+    --tool-bg: #12121a;
+    --tool-border: #2a2a3a;
+    --error: #e0556a;
+    --success: #4caf93;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app { display: flex; flex-direction: column; height: 100%; }
+
+  #header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: var(--surface);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  #header svg { width: 22px; height: 22px; flex-shrink: 0; }
+  #header .title { font-weight: 600; font-size: 13px; }
+  #header .badge {
+    margin-left: auto; font-size: 10px; padding: 2px 8px;
+    border-radius: 99px; background: var(--surface2);
+    color: var(--text2); cursor: pointer;
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  #header .badge:hover { background: var(--border); }
+  #header .badge.configured { color: var(--success); border-color: var(--success); }
+
+  #messages {
+    flex: 1; overflow-y: auto; padding: 12px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg { max-width: 100%; animation: msgIn 0.15s ease-out; }
+  @keyframes msgIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg.user { align-self: flex-end; max-width: 88%; }
+  .msg.user .bubble {
+    background: var(--user-bubble); border: 1px solid #3a2050;
+    border-radius: var(--radius) var(--radius) 2px var(--radius);
+    padding: 8px 12px; color: #e8d0f8;
+  }
+
+  .msg.assistant { align-self: flex-start; max-width: 92%; }
+  .msg.assistant .bubble {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) var(--radius) 2px;
+    padding: 10px 12px; white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.assistant .bubble p { margin: 0 0 6px; }
+  .msg.assistant .bubble p:last-child { margin-bottom: 0; }
+  .msg.assistant .bubble code { background: var(--surface2); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .msg.assistant .bubble pre { background: var(--surface2); padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 11px; margin: 6px 0; }
+
+  .tool-call {
+    align-self: flex-start; max-width: 94%;
+    background: var(--tool-bg); border: 1px solid var(--tool-border);
+    border-radius: var(--radius); padding: 8px 10px; font-size: 12px;
+  }
+  .tool-call .tool-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .tool-call .tool-name { font-weight: 600; color: var(--accent2); }
+  .tool-call .tool-args { color: var(--text2); font-size: 11px; }
+  .tool-call .tool-result {
+    margin-top: 6px; padding: 6px 8px; background: var(--surface);
+    border-radius: 6px; font-size: 11px; max-height: 160px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all;
+    color: var(--text2); border: 1px solid var(--border);
+  }
+  .tool-call .tool-result.error { color: var(--error); border-color: #4a2030; }
+  .tool-call .tool-result.ok { color: var(--success); }
+
+  #input-area { flex-shrink: 0; padding: 8px 10px; background: var(--surface); border-top: 1px solid var(--border); }
+  #input-area form { display: flex; gap: 6px; }
+  #prompt {
+    flex: 1; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px 12px; color: var(--text);
+    font-size: 13px; font-family: inherit; resize: none; outline: none;
+    min-height: 36px; max-height: 120px; line-height: 1.4;
+  }
+  #prompt:focus { border-color: var(--accent); }
+  #send-btn {
+    flex-shrink: 0; width: 36px; height: 36px; border: none;
+    border-radius: var(--radius); background: var(--accent); color: #fff;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  #send-btn:hover { background: var(--accent2); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  #status { display: none; padding: 4px 12px; background: #1a1020; border-top: 1px solid #3a2050; font-size: 11px; color: var(--text2); text-align: center; flex-shrink: 0; }
+  #status.visible { display: block; }
+
+  /* ── Settings overlay ── */
+  #settings {
+    display: none; position: absolute; top: 44px; bottom: 60px; left: 0; right: 0;
+    background: var(--bg); z-index: 10; overflow-y: auto; padding: 16px;
+    flex-direction: column; gap: 10px;
+  }
+  #settings.open { display: flex; }
+  #settings label {
+    font-size: 11px; color: var(--text2); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: -6px;
+  }
+  #settings select, #settings input, #settings textarea {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px; color: var(--text);
+    font-size: 13px; font-family: inherit; width: 100%;
+  }
+  #settings textarea { min-height: 80px; resize: vertical; font-size: 12px; }
+  #settings .btn-row { display: flex; gap: 8px; margin-top: 4px; }
+  #settings .btn {
+    flex: 1; padding: 8px; border: none; border-radius: 6px;
+    font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  #settings .btn.save { background: var(--accent); color: #fff; }
+  #settings .btn.save:hover { background: var(--accent2); }
+  #settings .btn.cancel { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+  /* Provider info row */
+  #settings .info-row {
+    display: flex; align-items: center; gap: 6px; font-size: 11px;
+  }
+  #settings .info-row .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  #settings .info-row .dot.ok { background: var(--success); }
+  #settings .info-row .dot.missing { background: var(--error); }
+
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: var(--text2); text-align: center; gap: 8px; padding: 20px;
+  }
+  .empty-state h2 { font-size: 15px; font-weight: 600; color: var(--text); }
+  .empty-state p { font-size: 12px; max-width: 300px; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <div id="header">
+    <svg viewBox="0 0 3220 2871" xmlns="http://www.w3.org/2000/svg" style="width:22px;height:22px">
+      <path d="M2256.65 2484.03L2134.81 2049.39L1818.74 923.806L909.855 890.35C590.801 898.868 303.627 1035.23 222.002 1134.03C132.335 1271.65 76.9257 1406.74L65.9034 1441.46C16.1544 2070.54 193.106 2350.51C293.2 2509.6 592.291 2722.34C1159.2 2848.91 1161.28 2848.91L2312.36 2683.51L2256.05 2483.4Z" fill="#C12D9C"/>
+      <path d="M2100.58 1629.25C2065.42 1695.22 2043.68 1725.2L1818.76 923.781L910.175 890.646C1023.38 674.111 1123.17 603.407C1815.79 517.868 2034.14 863.497C2129.77 1070.56 2178.33 1466.69 2100.58 1629.56Z" fill="#C12D9C"/>
+      <path d="M3187.01 2350.84L2312.98 2684.16L2256.67 2484.05L3187.01 2350.84Z" fill="#C12D9C"/>
+    </svg>
+    <span class="title">AI Fusion</span>
+    <span id="model-badge" class="badge" title="Open settings">⚙ deepseek</span>
+  </div>
+
+  <div id="messages">
+    <div class="empty-state" id="empty-state">
+      <h2>AI Fusion — Multi-Provider</h2>
+      <p>6 providers supported: DeepSeek · Kimi · GLM · OpenAI · Claude · Gemini</p>
+    </div>
+  </div>
+
+  <div id="status">Thinking...</div>
+
+  <div id="input-area">
+    <form id="chat-form" autocomplete="off">
+      <textarea id="prompt" rows="1" placeholder="Describe what you want to do..." spellcheck="false"></textarea>
+      <button id="send-btn" type="submit" title="Send (Enter)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+  <!-- ── Settings overlay (dynamic per provider) ── -->
+  <div id="settings">
+    <label>Provider</label>
+    <select id="cfg-provider">
+      <option value="deepseek">DeepSeek</option>
+      <option value="kimi">Kimi (Moonshot)</option>
+      <option value="zhipu">Zhipu GLM</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic Claude</option>
+      <option value="google_gemini">Google Gemini</option>
+    </select>
+
+    <div id="cfg-info" class="info-row"></div>
+
+    <label>Model</label>
+    <select id="cfg-model"></select>
+
+    <label id="cfg-apikey-label">API Key</label>
+    <input type="password" id="cfg-apikey" placeholder="sk-..." />
+
+    <label>Base URL</label>
+    <input type="text" id="cfg-baseurl" placeholder="https://..." />
+
+    <label>System Prompt</label>
+    <textarea id="cfg-system-prompt" placeholder="System instructions for the AI..." rows="4"></textarea>
+
+    <div class="btn-row">
+      <button class="btn cancel" id="settings-cancel">Cancel</button>
+      <button class="btn save" id="settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================================
+// AI Fusion — Multi-Provider Chat UI
+//
+// Key features:
+//  - Dynamic provider switching (6 providers)
+//  - Per-provider model list, API key field, base URL
+//  - Backward compatible with the existing /api/chat and /api/config endpoints
+// ============================================================================
+
+(function () {
+  "use strict";
+
+  // ── DOM refs ──
+  const messagesEl   = document.getElementById("messages");
+  const emptyState   = document.getElementById("empty-state");
+  const statusEl     = document.getElementById("status");
+  const promptEl     = document.getElementById("prompt");
+  const formEl       = document.getElementById("chat-form");
+  const sendBtn      = document.getElementById("send-btn");
+  const modelBadge   = document.getElementById("model-badge");
+  const settingsEl   = document.getElementById("settings");
+
+  // ── State ──
+  let conversation = [];
+  let isProcessing = false;
+  let providersMeta = {};  // fetched from /api/models
+
+  // ── API ──
+  const API_BASE = window.location.origin;
+
+  async function apiCall(method, path, body) {
+    const opts = { method, headers: { "Content-Type": "application/json" } };
+    if (body) opts.body = JSON.stringify(body);
+    const resp = await fetch(API_BASE + path, opts);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    return data;
+  }
+
+  // ── Fusion bridge ──
+  function callFusionTool(toolName, args) {
+    return new Promise((resolve) => {
+      function doCall() {
+        try {
+          // CRITICAL: The .pyc execute handler expects args in format:
+          // {featureType: "script", object: {script: "def run..."}}
+          // NOT {featureType: "script", script: "def run..."}
+          let bridgeArgs = args;
+          if (toolName === "execute" && args.featureType) {
+            bridgeArgs = { featureType: args.featureType };
+            if (args.featureType === "script") {
+              bridgeArgs.object = { script: args.script || "" };
+            } else if (args.featureType === "document") {
+              bridgeArgs.object = { action: args.action || "" };
+            } else if (args.featureType === "object") {
+              bridgeArgs.object = { fileId: args.fileId || "" };
+            }
+          }
+          const payload = JSON.stringify({ name: toolName, args: bridgeArgs });
+          const result = adsk.fusionSendData("tool.call", payload);
+          if (result && typeof result.then === "function") {
+            result.then(data => { try { resolve(JSON.parse(data)); } catch { resolve({raw:data}); } })
+                   .catch(err => resolve({error: err.message}));
+          } else {
+            try { resolve(JSON.parse(result)); } catch { resolve({raw: result}); }
+          }
+        } catch (e) { resolve({error: e.message}); }
+      }
+
+      if (typeof adsk !== "undefined" && adsk.fusionSendData) {
+        doCall();
+      } else {
+        // wait up to 3s for adsk
+        let waited = 0;
+        function poll() {
+          waited += 100;
+          if (typeof adsk !== "undefined" && adsk.fusionSendData) { doCall(); }
+          else if (waited >= 3000) {
+            resolve({_mock: true, message: `[Standalone] ${toolName} called.`});
+          } else { setTimeout(poll, 100); }
+        }
+        setTimeout(poll, 50);
+      }
+    });
+  }
+
+  // ── Rendering ──
+  function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+  function hideEmptyState() { if (emptyState) emptyState.style.display = "none"; }
+  function setStatus(t) { statusEl.textContent = t; statusEl.classList.add("visible"); }
+  function clearStatus() { statusEl.classList.remove("visible"); }
+  function escapeHtml(s) {
+    if (!s) return "";
+    const d = document.createElement("div");
+    d.appendChild(document.createTextNode(String(s)));
+    return d.innerHTML;
+  }
+
+  function renderMarkdown(text) {
+    if (!text) return "";
+    let html = escapeHtml(text);
+    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => `<pre><code>${code.trim()}</code></pre>`);
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+    html = html.split(/\n\n+/).map(p => `<p>${p.trim()}</p>`).join("");
+    html = html.replace(/\n/g, "<br>");
+    return html;
+  }
+
+  function addMessageEl(role, html) {
+    hideEmptyState();
+    const div = document.createElement("div");
+    div.className = `msg ${role}`;
+    div.innerHTML = `<div class="bubble">${html}</div>`;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  function addToolCallEl(toolName, args, result, isError) {
+    hideEmptyState();
+    const div = document.createElement("div");
+    div.className = "tool-call";
+
+    let argsPreview = "";
+    try {
+      const s = JSON.stringify(args);
+      argsPreview = escapeHtml(s.length > 200 ? s.slice(0, 200) + "…" : s);
+    } catch { argsPreview = "(...)"; }
+
+    let resultHtml = "";
+    if (result && result._mock) {
+      resultHtml = escapeHtml(result.message);
+    } else {
+      try {
+        resultHtml = `<pre style="margin:0;white-space:pre-wrap;font-size:11px;max-height:200px;overflow-y:auto;">${escapeHtml(JSON.stringify(result, null, 2).slice(0,500))}</pre>`;
+      } catch { resultHtml = "(unprintable)"; }
+    }
+
+    div.innerHTML = `
+      <div class="tool-header"><span class="tool-name">🔧 ${escapeHtml(toolName)}</span></div>
+      <div class="tool-args">${argsPreview}</div>
+      <div class="tool-result ${isError?'error':'ok'}">${resultHtml}</div>`;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+  }
+
+  function addThinkingEl(text) {
+    hideEmptyState();
+    const div = document.createElement("div");
+    div.style.cssText = "color:var(--text2);font-size:11px;font-style:italic;padding:4px 0";
+    div.textContent = text;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
+  // ── Conversation ──
+  async function sendMessage(userText) {
+    if (isProcessing || !userText.trim()) return;
+    isProcessing = true;
+    sendBtn.disabled = true;
+    setStatus("Thinking...");
+
+    conversation.push({ role: "user", content: userText });
+    addMessageEl("user", escapeHtml(userText));
+
+    try {
+      await runConversationLoop();
+    } catch (err) {
+      console.error("[aifusion]", err);
+      addMessageEl("assistant", `<span style="color:var(--error)">Error: ${escapeHtml(err.message)}</span>`);
+    } finally {
+      clearStatus();
+      isProcessing = false;
+      sendBtn.disabled = false;
+      promptEl.focus();
+    }
+  }
+
+  async function runConversationLoop() {
+    const MAX_ROUNDS = 10;
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      // Read current provider/model from badge for each API call
+      const [prov, model] = modelBadge.dataset.active
+        ? modelBadge.dataset.active.split("/")
+        : [null, null];
+
+      const body = { messages: conversation };
+      if (prov) body.provider = prov;
+      if (model) body.model = model;
+
+      const response = await apiCall("POST", "/api/chat", body);
+      const choice = response.choices?.[0];
+      if (!choice) throw new Error("No response from AI");
+
+      const msg = choice.message;
+
+      // text response
+      if (msg.content && !msg.tool_calls) {
+        conversation.push({ role: "assistant", content: msg.content });
+        addMessageEl("assistant", renderMarkdown(msg.content));
+        return;
+      }
+
+      // tool calls
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        conversation.push({ role: "assistant", content: msg.content || null, tool_calls: msg.tool_calls });
+
+        for (const tc of msg.tool_calls) {
+          const toolName = tc.function.name;
+          let args;
+          try { args = JSON.parse(tc.function.arguments || "{}"); } catch { args = {}; }
+
+          setStatus(`Running ${toolName}...`);
+          const thinkingEl = addThinkingEl(`Running ${toolName}...`);
+
+          let result, isError = false;
+          try { result = await callFusionTool(toolName, args); }
+          catch (err) { result = `Error: ${err.message}`; isError = true; }
+
+          thinkingEl.remove();
+          addToolCallEl(toolName, args, result, isError);
+
+          conversation.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            name: toolName,
+            content: typeof result === "string" ? result : JSON.stringify(result),
+          });
+        }
+        setStatus("Thinking...");
+        continue;
+      }
+
+      if (msg.content) {
+        conversation.push({ role: "assistant", content: msg.content });
+        addMessageEl("assistant", renderMarkdown(msg.content));
+        return;
+      }
+      throw new Error("Empty response");
+    }
+
+    // max rounds
+    conversation.push({ role: "user", content: "Please summarize what you've done." });
+    const final = await apiCall("POST", "/api/chat", { messages: conversation });
+    const c = final.choices?.[0]?.message?.content || "Done.";
+    conversation.push({ role: "assistant", content: c });
+    addMessageEl("assistant", renderMarkdown(c));
+  }
+
+  // ── Settings / Provider UI ──
+  function getCurrProvider() { return document.getElementById("cfg-provider").value; }
+
+  function updateModelSelect() {
+    const pid = getCurrProvider();
+    const sel  = document.getElementById("cfg-model");
+    sel.innerHTML = "";
+
+    const pmeta = providersMeta[pid];
+    if (pmeta && pmeta.models) {
+      const currentModel = window._currentModel || pmeta.models[0];
+      pmeta.models.forEach(m => {
+        const opt = document.createElement("option");
+        opt.value = m; opt.textContent = m;
+        if (m === currentModel) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  }
+
+  function updateProviderInfoRow() {
+    const pid   = getCurrProvider();
+    const pmeta = providersMeta[pid];
+    const row   = document.getElementById("cfg-info");
+    if (!pmeta) { row.innerHTML = ""; return; }
+
+    const configured = pmeta.configured;
+    row.innerHTML = `
+      <span class="dot ${configured ? 'ok' : 'missing'}"></span>
+      <span>${configured ? 'API key configured ✓' : 'No API key set — enter key below'}</span>
+    `;
+  }
+
+  function updateApiKeyField() {
+    const pid   = getCurrProvider();
+    const pmeta = providersMeta[pid];
+    const label = document.getElementById("cfg-apikey-label");
+    const input = document.getElementById("cfg-apikey");
+    const baseurl = document.getElementById("cfg-baseurl");
+
+    if (pmeta) {
+      label.textContent = `${pmeta.label} API Key`;
+      input.placeholder = pid === "anthropic" ? "sk-ant-..." : pid === "google_gemini" ? "AIza..." : "sk-...";
+      if (pmeta.base_url) baseurl.value = pmeta.base_url;
+    }
+  }
+
+  async function loadSettings() {
+    try {
+      const cfg = await apiCall("GET", "/api/config");
+      const modelsInfo = await apiCall("GET", "/api/models");
+      providersMeta = modelsInfo.providers || {};
+
+      window._currentModel = cfg.model || "";
+
+      // Resolve default provider: config > auto-detected (sole configured) > hard-coded
+      const defaultPid = cfg.provider || modelsInfo.default_provider || "deepseek";
+
+      // Populate provider dropdown
+      const provSel = document.getElementById("cfg-provider");
+      provSel.innerHTML = "";
+      Object.entries(providersMeta).forEach(([pid, pmeta]) => {
+        const opt = document.createElement("option");
+        opt.value = pid;
+        opt.textContent = pmeta.label;
+        if (pid === defaultPid) opt.selected = true;
+        provSel.appendChild(opt);
+      });
+
+      updateModelSelect();
+      updateProviderInfoRow();
+      updateApiKeyField();
+
+      // Load API key (from config for current provider)
+      const pid = getCurrProvider();
+      const pmeta = providersMeta[pid];
+      if (pmeta) {
+        const cfgKey = pmeta.config_key || `${pid}_api_key`;
+        document.getElementById("cfg-apikey").value = cfg[cfgKey] || "";
+      }
+
+      document.getElementById("cfg-system-prompt").value = cfg.system_prompt || "";
+
+    } catch (e) {
+      console.warn("[aifusion] Could not load settings:", e);
+    }
+  }
+
+  async function saveSettings() {
+    const pid     = getCurrProvider();
+    const pmeta   = providersMeta[pid];
+    const cfgKey  = pmeta ? (pmeta.config_key || `${pid}_api_key`) : `${pid}_api_key`;
+    const model   = document.getElementById("cfg-model").value;
+
+    const updates = {
+      provider: pid,
+      model: model,
+      system_prompt: document.getElementById("cfg-system-prompt").value,
+    };
+    updates[cfgKey] = document.getElementById("cfg-apikey").value;
+    updates[`${pid}_base_url`] = document.getElementById("cfg-baseurl").value;
+
+    try {
+      await apiCall("POST", "/api/config", updates);
+      settingsEl.classList.remove("open");
+
+      // Update badge
+      const label = pmeta ? pmeta.label : pid;
+      modelBadge.textContent = `⚙ ${label}/${model}`;
+      modelBadge.dataset.active = `${pid}/${model}`;
+      modelBadge.classList.toggle("configured", !!updates[cfgKey]);
+
+      // Reset conversation
+      conversation = [];
+      messagesEl.querySelectorAll(".msg, .tool-call").forEach(el => el.remove());
+      if (emptyState) emptyState.style.display = "";
+    } catch (err) { alert("Failed to save: " + err.message); }
+  }
+
+  // ── Event handlers ──
+  formEl.addEventListener("submit", e => {
+    e.preventDefault();
+    const text = promptEl.value.trim();
+    if (!text || isProcessing) return;
+    promptEl.value = "";
+    promptEl.style.height = "auto";
+    sendMessage(text);
+  });
+
+  promptEl.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); formEl.dispatchEvent(new Event("submit")); }
+  });
+  promptEl.addEventListener("input", () => {
+    promptEl.style.height = "auto";
+    promptEl.style.height = Math.min(promptEl.scrollHeight, 120) + "px";
+  });
+
+  modelBadge.addEventListener("click", () => {
+    settingsEl.classList.toggle("open");
+    if (settingsEl.classList.contains("open")) loadSettings();
+  });
+
+  document.getElementById("cfg-provider").addEventListener("change", () => {
+    updateModelSelect();
+    updateProviderInfoRow();
+    updateApiKeyField();
+    // Reload config to show the right API key
+    (async () => {
+      try {
+        const cfg = await apiCall("GET", "/api/config");
+        const pid = getCurrProvider();
+        const pmeta = providersMeta[pid];
+        const cfgKey = pmeta ? (pmeta.config_key || `${pid}_api_key`) : `${pid}_api_key`;
+        document.getElementById("cfg-apikey").value = cfg[cfgKey] || "";
+      } catch {}
+    })();
+  });
+
+  document.getElementById("settings-cancel").addEventListener("click", () => settingsEl.classList.remove("open"));
+  document.getElementById("settings-save").addEventListener("click", saveSettings);
+
+  // ── Init ──
+  async function init() {
+    try {
+      const modelsInfo = await apiCall("GET", "/api/models");
+      providersMeta = modelsInfo.providers || {};
+
+      // Priority: config.stored_provider > auto-detected (sole configured) > hard-coded
+      const defaultPid = modelsInfo.default_provider || "deepseek";
+      const configuredCount = modelsInfo.configured_count || 0;
+
+      // If only one provider has a key, auto-select it regardless of cfg.provider
+      let pid;
+      if (configuredCount === 1 && defaultPid) {
+        pid = defaultPid;  // sole configured provider wins
+      } else {
+        pid = defaultPid;  // use whatever resolution gave us
+      }
+
+      const pmeta = providersMeta[pid] || {};
+      const model = pmeta.models ? pmeta.models[0] : "";
+      const label = pmeta.label || pid;
+      const configured = pmeta.configured || false;
+
+      modelBadge.textContent = configured
+        ? `⚙ ${label}/${model}`
+        : `⚙ ${configuredCount === 0 ? "No API key set" : label + "/" + model}`;
+      modelBadge.dataset.active = `${pid}/${model}`;
+      modelBadge.classList.toggle("configured", configured);
+    } catch (e) {
+      console.warn("[aifusion] Init failed:", e);
+    }
+  }
+  init();
+})();
+</script>
+</body>
+</html>

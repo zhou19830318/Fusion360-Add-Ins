@@ -1,0 +1,777 @@
+"""AIFusion local chat server.
+
+Replaces the hosted fusion.adam.new/chat backend with a lightweight Flask
+server that proxies AI requests to DeepSeek or Kimi (Moonshot) directly.
+The Fusion add-in palette loads the chat UI from this server; tool calls
+are dispatched to Fusion via the existing adsk.fusionSendData bridge
+(handled by bridge/*.pyc and handlers/*.pyc, which remain unchanged).
+
+Usage:
+    python server.py                  # uses config.json defaults
+    AIFUSION_PORT=8765 python server.py   # override port
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+import requests
+from flask import Flask, jsonify, request, send_from_directory
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_DIR = Path(__file__).resolve().parent
+_CONFIG_PATH = _DIR / "config.json"
+_DEFAULT_PORT = 8765
+
+# ---------------------------------------------------------------------------
+# Fusion tool definitions (OpenAI function-calling schema)
+# ---------------------------------------------------------------------------
+
+FUSION_TOOLS: list[dict[str, Any]] = [
+    # =================================================================
+    # read — query the Fusion design (inspect-before-acting pattern)
+    # =================================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "read",
+            "description": (
+                "Query information from the active Fusion 360 design. "
+                "Use this BEFORE making any changes — understand the current "
+                "model state thoroughly. Supports listing bodies, measuring "
+                "dimensions, searching API documentation, browsing material "
+                "libraries, inspecting the timeline, and more.\n\n"
+                "Common workflow: list bodies → analyze bbox/zones → "
+                "identify components → check API docs → build geometry.\n\n"
+                "When querying apiDocumentation, set apiCategory to "
+                "'function', 'member', 'class', 'property', or 'enum' "
+                "and use searchPattern for the API name. This is essential "
+                "before calling unfamiliar Fusion API functions in scripts."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "queryType": {
+                        "type": "string",
+                        "description": "What kind of information to read.",
+                        "enum": [
+                            "bodies", "faces", "edges", "features",
+                            "sketches", "sketchProfiles",
+                            "parameters", "userParameters", "modelParameters",
+                            "materialLibraries", "materialAppearance",
+                            "selection", "selectionSets",
+                            "timeline", "timelineStatus",
+                            "document", "projects",
+                            "volume", "area", "length", "centroid",
+                            "similar", "edgesByType",
+                            "apiDocumentation",
+                            "screenshot",
+                        ],
+                    },
+                    "entityToken": {
+                        "type": "string",
+                        "description": "Compressed token for a specific entity to query.",
+                    },
+                    "featureType": {
+                        "type": "string",
+                        "description": "Filter results by feature type name (e.g. 'extrude', 'sketch', 'fillet').",
+                    },
+                    "apiCategory": {
+                        "type": "string",
+                        "enum": ["function", "member", "class", "property", "enum"],
+                        "description": "For apiDocumentation queries: which category of API element to search.",
+                    },
+                    "searchPattern": {
+                        "type": "string",
+                        "description": "For apiDocumentation: API function/class name to search (e.g. 'setOneSideExtent|DistanceExtentDefinition'). Use | to separate multiple terms.",
+                    },
+                    "userDescription": {
+                        "type": "string",
+                        "description": "Human-readable description of what you're looking for (logged for debugging).",
+                    },
+                    "search": {
+                        "type": "string",
+                        "description": "General search term for name-based queries or material searches.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return.",
+                    },
+                    "sortBy": {
+                        "type": "string",
+                        "description": "Field to sort results by.",
+                    },
+                },
+                "required": ["queryType"],
+            },
+        },
+    },
+    # =================================================================
+    # create — add new features (simpler than execute scripts)
+    # =================================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "create",
+            "description": (
+                "Create new geometry, features, sketches, or parameters "
+                "in the active Fusion 360 design. For complex multi-step "
+                "geometry, prefer the **execute** tool with a Python script "
+                "that uses the Fusion API directly — it gives you precise "
+                "control over every extrusion, sketch, and cut.\n\n"
+                "Use this tool for simple single-feature additions. For "
+                "enclosures, multi-body assemblies, or anything requiring "
+                "multiple coordinated features, use execute + script instead."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "featureType": {
+                        "type": "string",
+                        "description": "Type of feature to create.",
+                        "enum": [
+                            "box", "cylinder", "sphere", "torus", "coil",
+                            "sketch", "sketchEntity", "extrude", "revolve",
+                            "fillet", "chamfer", "shell", "hole",
+                            "constructionPlane", "userParameter",
+                            "circularPattern", "rectangularPattern",
+                            "sketchCircularPattern", "sketchRectangularPattern",
+                            "selectionSet", "projectToSketch", "split",
+                            "material", "appearance",
+                        ],
+                    },
+                    "name": {"type": "string", "description": "Optional name for the created feature."},
+                    "width": {"type": "number"}, "depth": {"type": "number"},
+                    "height": {"type": "number"}, "radius": {"type": "number"},
+                    "diameter": {"type": "number"}, "length": {"type": "number"},
+                    "majorRadius": {"type": "number"}, "minorRadius": {"type": "number"},
+                    "angle": {"type": "number"}, "count": {"type": "number"},
+                    "taperAngle": {"type": "number"},
+                    "operation": {
+                        "type": "string",
+                        "enum": ["join", "cut", "intersect", "newBody", "newComponent"],
+                    },
+                    "extent": {"type": "string"},
+                    "direction": {
+                        "type": "string",
+                        "enum": ["oneSide", "twoSides", "symmetric"],
+                    },
+                    "plane": {"type": "string"},
+                    "centerX": {"type": "number"}, "centerY": {"type": "number"}, "centerZ": {"type": "number"},
+                    "positionX": {"type": "number"}, "positionY": {"type": "number"}, "positionZ": {"type": "number"},
+                    "targetBodyToken": {"type": "string"},
+                    "entityTokens": {"type": "array", "items": {"type": "string"}},
+                    "value": {"type": "string", "description": "Expression value (e.g. '50 mm')."},
+                    "parameters": {"type": "object", "description": "Additional feature-specific parameters."},
+                },
+                "required": ["featureType"],
+            },
+        },
+    },
+    # =================================================================
+    # update — modify existing features or model state
+    # =================================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "update",
+            "description": (
+                "Modify existing features, parameters, visibility, "
+                "or timeline position in Fusion 360. Also supports "
+                "undo/redo for rolling back mistakes during iterative design."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "featureType": {
+                        "type": "string",
+                        "description": "Type of update.",
+                        "enum": [
+                            "undo", "redo", "userParameter", "modelParameter",
+                            "visibility", "highlight", "materialAppearance",
+                            "selectionSet", "activeSelection", "timeline",
+                            "extrude", "revolve", "fillet", "chamfer",
+                            "shell", "hole", "circularPattern",
+                            "rectangularPattern", "constructionPlane", "sketchEntity",
+                        ],
+                    },
+                    "featureName": {"type": "string"},
+                    "entityToken": {"type": "string"},
+                    "visible": {"type": "boolean"},
+                    "color": {"type": "string", "enum": ["red", "green", "blue", "yellow", "orange", "purple", "cyan", "white"]},
+                    "modifications": {"type": "object"},
+                    "values": {"type": "object"},
+                    "timelineIndex": {"type": "integer"},
+                },
+                "required": ["featureType"],
+            },
+        },
+    },
+    # =================================================================
+    # delete — remove features or entities
+    # =================================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "delete",
+            "description": (
+                "Delete features, sketches, bodies, parameters, or "
+                "construction geometry from the active design. Also "
+                "supports deleting timeline items to roll back changes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "featureType": {"type": "string", "description": "Type of item to delete."},
+                    "featureNames": {"type": "array", "items": {"type": "string"}},
+                    "deleteAll": {"type": "boolean", "description": "Delete ALL items of the given featureType."},
+                },
+                "required": ["featureType"],
+            },
+        },
+    },
+    # =================================================================
+    # execute — the PRIMARY creation tool for complex geometry
+    # =================================================================
+    {
+        "type": "function",
+        "function": {
+            "name": "execute",
+            "description": (
+                "Execute Python scripts directly against the Fusion 360 API, "
+                "or perform document operations (open, save, close).\n\n"
+                "**CRITICAL: Never use ThroughAllExtentDefinition.create() with arguments.** "
+                "ThroughAllExtentDefinition.create() takes ZERO arguments. "
+                "For side cuts (USB, FPC, SD card openings), ALWAYS use:\n"
+                "  ei.startExtent = OffsetStartDefinition.create(vi(z0))\n"
+                "  ei.setOneSideExtent(DistanceExtentDefinition.create(vi(distance)), direction)\n"
+                "Do NOT use ThroughAllExtentDefinition for side cuts — use DistanceExtentDefinition.\n\n"
+                "**CRITICAL: RevolveFeatures.createInput(profiles_col, axis, operation) needs ALL 3 ARGS.**\n"
+                "The third argument is the FeatureOperation: NewBodyFeatureOperation, JoinFeatureOperation, etc.\n"
+                "Example: ri = rev.createInput(prof_col, root.xConstructionAxis, NEW)\n\n"
+                "**CRITICAL: Bodies are accessed via root.bRepBodies — NOT root.bodies or component.bodies.**\n"
+                "Example: for body in root.bRepBodies: print(body.name)\n\n"
+                "**CRITICAL: Always check sk.profiles.count > 0 before creating an ExtrudeInput or RevolveInput.**\n\n"
+                "**This is your primary tool for creating complex geometry.** "
+                "For enclosures, multi-body assemblies, or anything requiring "
+                "coordinated features (sketches + extrusions + cuts + patterns), "
+                "write a single comprehensive script rather than chaining "
+                "individual create tool calls.\n\n"
+                "**Script requirements:**\n"
+                "- Must define a top-level `def run(_context: str):` function\n"
+                "- Has access to: `adsk.core`, `adsk.fusion`, `math`, `traceback`, `time`\n"
+                "- Use `adsk.core.Application.get()` to get the app\n"
+                "- Cast active product: `adsk.fusion.Design.cast(app.activeProduct)`\n"
+                "- Use `print()` for diagnostic output — stdout is captured and returned\n"
+                "- Unit conversion: 1 cm (Fusion internal) = 10 mm → use `MM = 0.1` helper\n\n"
+                "**Key Fusion API patterns (see system prompt for full reference):**\n"
+                "- Rounded rectangles: helper function using sketchLines + sketchArcs\n"
+                "- Deferred sketch compute: `sk.isComputeDeferred = True` for multi-curve sketches\n"
+                "- Extrusion: `OffsetStartDefinition` + `DistanceExtentDefinition` + `setOneSideExtent`\n"
+                "- Operations: NewBodyFeatureOperation, JoinFeatureOperation, CutFeatureOperation\n"
+                "- Interference checking: `des.createInterferenceInput()` + `des.analyzeInterference()`\n"
+                "- Materials: `materialLibraries`, `appearances`, `materials`, `addByCopy`"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "featureType": {
+                        "type": "string",
+                        "enum": ["script", "document", "object"],
+                        "description": (
+                            "'script' — run a Python script against the Fusion API. "
+                            "'document' — open/close/save documents. "
+                            "'object' — open a data file by ID."
+                        ),
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": (
+                            "Python source code to execute. Must define 'def run(_context):'. "
+                            "The _context parameter receives the Fusion add-in context string."
+                        ),
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": ["open", "close", "save"],
+                        "description": "Document action (when featureType is 'document').",
+                    },
+                    "fileId": {
+                        "type": "string",
+                        "description": "Data file ID for document/object operations.",
+                    },
+                },
+                "required": ["featureType"],
+            },
+        },
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+DEFAULT_CONFIG: dict[str, Any] = {
+    "provider": "deepseek",  # "deepseek" | "kimi"
+    "model": "deepseek-v4-flash",
+    "deepseek_api_key": "",
+    "deepseek_base_url": "https://api.deepseek.com",
+    "kimi_api_key": "",
+    "kimi_base_url": "https://api.moonshot.cn/v1",
+    "server_port": _DEFAULT_PORT,
+    "system_prompt": (
+        "You are AI Fusion, an AI copilot for Autodesk Fusion 360. "
+        "You help users create, modify, and explore 3D CAD models through "
+        "natural language conversation.\n\n"
+        "## Tools at your disposal\n"
+        "- **read**: query the model (bodies, features, sketches, "
+        "parameters, dimensions, timeline, api docs, materials, etc.)\n"
+        "- **create**: add simple single features (for complex multi-step "
+        "geometry, use execute + script instead)\n"
+        "- **update**: modify existing features, parameters, visibility, "
+        "undo/redo\n"
+        "- **delete**: remove features, timeline items, or entities\n"
+        "- **execute**: run Python scripts directly against the Fusion API "
+        "— THIS IS YOUR PRIMARY TOOL for building complex geometry\n\n"
+        "## Workflow pattern (always follow this)\n"
+        "1. **Analyze** — use read to understand the model: list bodies, "
+        "measure bounding boxes, identify relevant components by name, "
+        "check API documentation before using unfamiliar functions\n"
+        "2. **Plan** — describe what you'll build before writing code\n"
+        "3. **Build** — write one comprehensive execute script per component "
+        "(rather than chaining many small tool calls)\n"
+        "4. **Verify** — check for interference with existing bodies, "
+        "measure clearances, validate dimensions\n"
+        "5. **Refine** — adjust clearances, add structural details, "
+        "apply materials/appearances\n\n"
+        "## Unit system\n"
+        "- Fusion uses **cm** internally. 1 cm = 10 mm.\n"
+        "- ALWAYS use `MM = 0.1` as the conversion constant.\n"
+        "- Define point/vector helpers at the top of every script:\n"
+        "  ```python\n"
+        "  MM = 0.1\n"
+        "  def P(x, y, z=0.0):\n"
+        "      return adsk.core.Point3D.create(x*MM, y*MM, z*MM)\n"
+        "  def vi(v):\n"
+        "      return adsk.core.ValueInput.createByReal(v*MM)\n"
+        "  ```\n"
+        "- All dimensions in scripts should be in **mm** (multiplied by MM).\n\n"
+        "## Fusion API coding patterns\n\n"
+        "### Rounded rectangle sketch helper (use for enclosure outlines):\n"
+        "```python\n"
+        "def rrect(sk, x0, y0, x1, y1, r):\n"
+        "    L = sk.sketchCurves.sketchLines\n"
+        "    A = sk.sketchCurves.sketchArcs\n"
+        "    L.addByTwoPoints(P(x0+r, y0), P(x1-r, y0))\n"
+        "    A.addByCenterStartSweep(P(x1-r, y0+r), P(x1-r, y0), math.pi/2)\n"
+        "    L.addByTwoPoints(P(x1, y0+r), P(x1, y1-r))\n"
+        "    A.addByCenterStartSweep(P(x1-r, y1-r), P(x1, y1-r), math.pi/2)\n"
+        "    L.addByTwoPoints(P(x1-r, y1), P(x0+r, y1))\n"
+        "    A.addByCenterStartSweep(P(x0+r, y1-r), P(x0+r, y1), math.pi/2)\n"
+        "    L.addByTwoPoints(P(x0, y1-r), P(x0, y0+r))\n"
+        "    A.addByCenterStartSweep(P(x0+r, y0+r), P(x0, y0+r), math.pi/2)\n"
+        "```\n\n"
+        "### Extrusion helper with deferred sketch compute:\n"
+        "```python\n"
+        "def newsk():\n"
+        "    s = comp.sketches.add(comp.xYConstructionPlane)\n"
+        "    s.isComputeDeferred = True  # batch all curves before solving\n"
+        "    return s\n\n"
+        "def do(sk, z0, z1, op, bodies=None):\n"
+        "    sk.isComputeDeferred = False  # trigger solve\n"
+        "    col = adsk.core.ObjectCollection.create()\n"
+        "    for p in sk.profiles:\n"
+        "        col.add(p)\n"
+        "    ei = ext.createInput(col, op)\n"
+        "    ei.startExtent = adsk.fusion.OffsetStartDefinition.create(vi(z0))\n"
+        "    ei.setOneSideExtent(\n"
+        "        adsk.fusion.DistanceExtentDefinition.create(vi(z1 - z0)),\n"
+        "        adsk.fusion.ExtentDirections.PositiveExtentDirection)\n"
+        "    if bodies:\n"
+        "        ei.participantBodies = bodies\n"
+        "    return ext.add(ei)\n"
+        "```\n\n"
+        "### Feature operations:\n"
+        "- `adsk.fusion.FeatureOperations.NewBodyFeatureOperation` — create new body\n"
+        "- `adsk.fusion.FeatureOperations.JoinFeatureOperation` — add material\n"
+        "- `adsk.fusion.FeatureOperations.CutFeatureOperation` — remove material\n\n"
+        "### Creating a new component (for sub-assemblies):\n"
+        "```python\n"
+        "occ = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())\n"
+        "comp = occ.component\n"
+        "comp.name = 'MyComponent'\n"
+        "```\n\n"
+        "### Interference checking:\n"
+        "```python\n"
+        "col = adsk.core.ObjectCollection.create()\n"
+        "col.add(body1); col.add(body2)\n"
+        "ii = des.createInterferenceInput(col)\n"
+        "ii.areCoincidentFacesIncluded = False\n"
+        "res = des.analyzeInterference(ii)\n"
+        "if res:\n"
+        "    for k in range(res.count):\n"
+        "        r = res.item(k)\n"
+        "        print(f'interference: {r.entityOne.parentComponent.name}'\n"
+        "              f' <-> {r.entityTwo.parentComponent.name}'\n"
+        "              f'  vol={r.interferenceBody.volume*1000:.2f}mm3')\n"
+        "```\n\n"
+        "### Applying materials and appearances:\n"
+        "```python\n"
+        "alib = app.materialLibraries.itemByName('Fusion 外观库')\n"
+        "mlib = app.materialLibraries.itemByName('Fusion 材料库')\n"
+        "abs_mat = mlib.materials.itemByName('ABS 塑料')\n"
+        "ap = alib.appearances.itemByName('塑料 - 粗面(黑色)')\n"
+        "local_ap = des.appearances.addByCopy(ap, '塑料 - 粗面(黑色)')\n"
+        "m = des.materials.addByCopy(abs_mat, 'ABS 塑料')\n"
+        "body.material = m\n"
+        "body.appearance = local_ap\n"
+        "```\n\n"
+        "### Namespace queries (finding components by name):\n"
+        "```python\n"
+        "for occ in root.occurrences:  # top-level only\n"
+        "    if occ.name == 'MyPart:1': ...\n"
+        "for occ in root.allOccurrences:  # recursive, all levels\n"
+        "    if occ.component.name == 'MyComponent': ...\n"
+        "```\n\n"
+        "### Measuring distances:\n"
+        "```python\n"
+        "mm = app.measureManager\n"
+        "r = mm.measureMinimumDistance(body1, body2)\n"
+        "if r: print(f'distance: {r.value*10:.3f} mm')\n"
+        "```\n\n"
+        "### Physical properties:\n"
+        "```python\n"
+        "pp = body.physicalProperties\n"
+        "print(f'mass: {pp.mass*1000:.2f} g  volume: {body.volume*1000:.1f} mm3')\n"
+        "```\n\n"
+        "### Camera control:\n"
+        "```python\n"
+        "vp = app.activeViewport\n"
+        "cam = vp.camera\n"
+        "cam.viewOrientation = adsk.core.ViewOrientations.TopViewOrientation\n"
+        "cam.isFitView = True\n"
+        "vp.camera = cam\n"
+        "vp.refresh()\n"
+        "```\n\n"
+        "## Critical rules\n"
+        "- **Always verify API signatures** with a read(apiDocumentation) "
+        "query before using unfamiliar Fusion API functions in scripts.\n"
+        "- **Always interference-check** your geometry against existing "
+        "bodies after building — iterate until zero interference.\n"
+        "- **Always measure clearances** between your parts and critical "
+        "components (connectors, tall parts, buttons).\n"
+        "- **Design for manufacturing**: add 0.1-0.3mm clearance between "
+        "mating parts, use consistent wall thickness (default 1.6mm), "
+        "add gussets/ribs for strength at screw bosses.\n"
+        "- **Use execute scripts for complex geometry**. Do NOT chain "
+        "individual create calls — each create call is a separate timeline "
+        "feature and cannot share sketch geometry.\n"
+        "- **Print detailed diagnostics** from scripts — bounding boxes, "
+        "volumes, part counts — so the user can verify your work.\n"
+        "- **Be thorough**: measure everything relevant before building, "
+        "verify everything after building. Don't make the user ask for checks."
+    ),
+}
+
+
+def load_config() -> dict[str, Any]:
+    """Load config from disk, falling back to defaults."""
+    cfg = dict(DEFAULT_CONFIG)
+    try:
+        if _CONFIG_PATH.exists():
+            with open(_CONFIG_PATH, "r", encoding="utf-8") as fh:
+                disk = json.load(fh)
+            cfg.update(disk)
+    except Exception:
+        pass
+    return cfg
+
+
+def save_config(cfg: dict[str, Any]) -> None:
+    """Persist config to disk."""
+    with open(_CONFIG_PATH, "w", encoding="utf-8") as fh:
+        json.dump(cfg, fh, indent=2, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# Flask app
+# ---------------------------------------------------------------------------
+
+def create_app() -> Flask:
+    # Suppress Flask's default request logging (every GET/POST pollutes stderr)
+    import logging as _flog
+    _flog.getLogger("werkzeug").setLevel(_flog.ERROR)
+
+    app = Flask(__name__, static_folder=str(_DIR))
+
+    # ------------------------------------------------------------------
+    # /chat — serve the chat UI
+    # ------------------------------------------------------------------
+    @app.route("/chat")
+    def chat_ui():
+        return send_from_directory(str(_DIR), "chat_ui.html")
+
+    # ------------------------------------------------------------------
+    # /api/chat — proxy to DeepSeek / Kimi
+    # ------------------------------------------------------------------
+    @app.route("/api/chat", methods=["POST"])
+    def api_chat():
+        cfg = load_config()
+        payload = request.get_json(force=True)
+
+        messages: list[dict[str, Any]] = payload.get("messages", [])
+        tools_supplied: list[dict[str, Any]] | None = payload.get("tools")
+        tool_choice: str | None = payload.get("tool_choice")
+
+        # Prepend system prompt if not already present
+        if not any(m.get("role") == "system" for m in messages):
+            messages.insert(0, {"role": "system", "content": cfg["system_prompt"]})
+
+        provider = cfg["provider"]
+
+        if provider == "deepseek":
+            api_key = cfg.get("deepseek_api_key", "")
+            base_url = cfg.get("deepseek_base_url", "https://api.deepseek.com")
+            model = cfg.get("model", "deepseek-chat")
+        elif provider == "kimi":
+            api_key = cfg.get("kimi_api_key", "")
+            base_url = cfg.get("kimi_base_url", "https://api.moonshot.cn/v1")
+            model = cfg.get("model", "moonshot-v1-auto")
+        else:
+            return jsonify({"error": f"Unknown provider: {provider}"}), 400
+
+        if not api_key:
+            return jsonify({
+                "error": (
+                    f"No API key configured for {provider}. "
+                    f"Set {provider}_api_key in config.json or use "
+                    f"the /api/config endpoint."
+                )
+            }), 400
+
+        # Build the request body (OpenAI-compatible format)
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+
+        # Use provided tools or default Fusion tools
+        if tools_supplied is not None:
+            body["tools"] = tools_supplied
+        else:
+            body["tools"] = FUSION_TOOLS
+
+        if tool_choice:
+            body["tool_choice"] = tool_choice
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        endpoint = f"{base_url.rstrip('/')}/chat/completions"
+
+        try:
+            resp = requests.post(
+                endpoint,
+                json=body,
+                headers=headers,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            return jsonify(resp.json())
+        except requests.exceptions.Timeout:
+            return jsonify({"error": "AI provider request timed out (120s)."}), 504
+        except requests.exceptions.HTTPError as exc:
+            detail = ""
+            try:
+                detail = exc.response.text[:1000]
+            except Exception:
+                pass
+            return jsonify({
+                "error": f"AI provider returned {exc.response.status_code}: {detail}",
+            }), 502
+        except requests.exceptions.ConnectionError:
+            return jsonify({"error": f"Cannot connect to {endpoint}"}), 502
+
+    # ------------------------------------------------------------------
+    # /api/models — list available models
+    # ------------------------------------------------------------------
+    @app.route("/api/models")
+    def api_models():
+        cfg = load_config()
+        return jsonify({
+            "current_provider": cfg["provider"],
+            "current_model": cfg["model"],
+            "providers": {
+                "deepseek": {
+                    "models": ["deepseek-v4-flash", "deepseek-v4-pro"],
+                    "base_url": cfg.get("deepseek_base_url", "https://api.deepseek.com"),
+                    "configured": bool(cfg.get("deepseek_api_key")),
+                },
+                "kimi": {
+                    "models": [
+                        "moonshot-v1-auto",
+                        "moonshot-v1-8k",
+                        "moonshot-v1-32k",
+                        "moonshot-v1-128k",
+                    ],
+                    "base_url": cfg.get("kimi_base_url", "https://api.moonshot.cn/v1"),
+                    "configured": bool(cfg.get("kimi_api_key")),
+                },
+            },
+        })
+
+    # ------------------------------------------------------------------
+    # /api/config — read / update configuration
+    # ------------------------------------------------------------------
+    @app.route("/api/config", methods=["GET", "POST"])
+    def api_config():
+        if request.method == "GET":
+            cfg = load_config()
+            # Never return API keys in full
+            safe = dict(cfg)
+            safe["deepseek_api_key"] = (
+                "***" + cfg["deepseek_api_key"][-4:]
+                if len(cfg.get("deepseek_api_key", "")) > 4
+                else ""
+            )
+            safe["kimi_api_key"] = (
+                "***" + cfg["kimi_api_key"][-4:]
+                if len(cfg.get("kimi_api_key", "")) > 4
+                else ""
+            )
+            return jsonify(safe)
+
+        # POST — merge updates
+        cfg = load_config()
+        updates = request.get_json(force=True)
+        allowed_keys = {
+            "provider", "model",
+            "deepseek_api_key", "deepseek_base_url",
+            "kimi_api_key", "kimi_base_url",
+            "system_prompt",
+        }
+        for k, v in updates.items():
+            if k in allowed_keys:
+                cfg[k] = v
+        save_config(cfg)
+        return jsonify({"status": "ok", "updated": list(updates.keys())})
+
+    # ------------------------------------------------------------------
+    # CORS — allow ONLY Fusion palette (Qt WebView on localhost) to connect
+    # ------------------------------------------------------------------
+    _LOCAL_ORIGINS = frozenset({
+        "http://127.0.0.1:8765",
+        f"http://127.0.0.1:{_DEFAULT_PORT}",
+        "null",  # Qt WebEngine may send origin: null
+    })
+
+    @app.after_request
+    def add_cors_headers(resp):
+        origin = request.headers.get("Origin", "")
+        if origin in _LOCAL_ORIGINS or not origin:
+            resp.headers["Access-Control-Allow-Origin"] = origin or "http://127.0.0.1:8765"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-AIFusion-Token"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return resp
+
+    return app
+
+
+# ---------------------------------------------------------------------------
+# Thread-based launcher (used by AdamFusion.py when running in-process)
+# ---------------------------------------------------------------------------
+
+def start_in_thread(port: int | None = None) -> "threading.Thread":
+    """Create and start the Flask app in a **daemon thread**.
+
+    This avoids subprocess issues (wrong Python executable, missing
+    dependencies in a child process).  The caller is responsible for
+    ensuring ``flask`` and ``requests`` are importable beforehand.
+
+    Returns the started :class:`threading.Thread` so the caller can
+    check ``is_alive()`` or join on shutdown.
+    """
+    import threading as _threading
+
+    port = port or int(os.environ.get("AIFUSION_PORT", _DEFAULT_PORT))
+
+    # Ensure config.json exists
+    if not _CONFIG_PATH.exists():
+        save_config(DEFAULT_CONFIG)
+
+    _app = create_app()
+
+    def _run() -> None:
+        try:
+            _app.run(
+                host="127.0.0.1",
+                port=port,
+                debug=False,
+                use_reloader=False,
+            )
+        except Exception as exc:
+            print(f"[aifusion] Flask thread error: {exc}")
+
+    t = _threading.Thread(target=_run, daemon=True, name="AIFusionServer")
+    t.start()
+    return t
+
+
+def wait_until_ready(host: str = "127.0.0.1", port: int = _DEFAULT_PORT,
+                     timeout: float = 6.0) -> bool:
+    """Poll ``/api/models`` and return ``True`` once the server responds.
+
+    Blocks up to *timeout* seconds.
+    """
+    import time as _time
+    import urllib.request as _request
+
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline:
+        try:
+            req = _request.Request(f"http://{host}:{port}/api/models", method="GET")
+            _request.urlopen(req, timeout=1)
+            return True
+        except Exception:
+            _time.sleep(0.2)
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    port = int(os.environ.get("AIFUSION_PORT", _DEFAULT_PORT))
+
+    # Ensure config.json exists with defaults
+    if not _CONFIG_PATH.exists():
+        save_config(DEFAULT_CONFIG)
+        print(f"[aifusion] Created default config at {_CONFIG_PATH}")
+        print("[aifusion] Edit config.json to add your API key, then restart.")
+
+    app = create_app()
+
+    print(f"[aifusion] Local chat server starting on http://127.0.0.1:{port}")
+    print(f"[aifusion] Chat UI:  http://127.0.0.1:{port}/chat")
+    print(f"[aifusion] API:      http://127.0.0.1:{port}/api/chat")
+    print(f"[aifusion] Config:   http://127.0.0.1:{port}/api/config")
+    print("[aifusion] Press Ctrl+C to stop.")
+
+    try:
+        app.run(host="127.0.0.1", port=port, debug=False)
+    except KeyboardInterrupt:
+        print("\n[aifusion] Server stopped.")
+
+
+if __name__ == "__main__":
+    main()

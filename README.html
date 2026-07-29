@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AI Fusion – AI Copilot — Quick Start</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; line-height: 1.55; }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+  h2 { margin-top: 2rem; font-size: 1.15rem; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  code { background: #f4f4f5; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f4f4f5; padding: 0.75rem 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85em; }
+  a { color: #2563eb; }
+  ul { padding-left: 1.25rem; }
+  li { margin: 0.25rem 0; }
+</style>
+</head>
+<body>
+
+<h1>AI Fusion – AI Copilot</h1>
+<p>AI copilot for Autodesk Fusion. AI Fusion adds a docked chat palette to Fusion that drives your design natively — sketching, modelling, editing features, querying the timeline — through normal conversation.</p>
+
+<h2>What gets sent over the network</h2>
+<p>Your prompts and the tool calls AI Fusion runs on your behalf are sent to <code>fusion.adam.new</code> and forwarded to the model provider you've selected (Anthropic, OpenAI, or Google). Tool calls and their results — feature parameters, entity tokens, screenshots when you take them — travel the same way.</p>
+<p>AI Fusion <strong>does not</strong> read or upload your <code>.f3d</code> / <code>.f3z</code> files. All Fusion API work happens in-process inside Fusion via this add-in; only the chat protocol leaves your machine.</p>
+<p>Sign-in uses your existing Autodesk account via Autodesk Platform Services (APS) OAuth. AI Fusion requests the <code>openid</code> and <code>user-profile:read</code> scopes only — no <code>data:*</code> or <code>bucket:*</code>.</p>
+
+<h2>Install / upgrade</h2>
+<p>The simplest path is the installer at <a href="https://fusion.adam.new/install">https://fusion.adam.new/install</a>. One-liners for each platform:</p>
+
+<p><strong>macOS — Terminal</strong></p>
+<pre>curl -sSL https://fusion.adam.new/install.sh | bash</pre>
+
+<p><strong>Windows — PowerShell</strong></p>
+<pre>irm https://fusion.adam.new/install.ps1 | iex</pre>
+
+<p>After install, fully quit Fusion, reopen it, then in Fusion press <code>Shift+S</code> → <strong>Add-Ins</strong> tab → find <strong>AIFusion</strong> → click <strong>Run</strong> and tick <strong>Run on Startup</strong>. Fusion ships new add-ins disabled until you click Run once; after that it auto-loads on every launch. If you ever close the AI Fusion palette, reopen it from the <strong>Utilities</strong> tab → <strong>Add-Ins</strong> panel → <strong>AI Fusion – AI Copilot</strong> button (or rerun the add-in from <code>Shift+S</code>).</p>
+<p>Re-running the installer upgrades in place.</p>
+
+<h2>Uninstall</h2>
+<p>Quit Fusion, then remove the add-in directory:</p>
+<ul>
+  <li><strong>macOS:</strong> <code>rm -rf "$HOME/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/AIFusion"</code></li>
+  <li><strong>Windows:</strong> delete <code>%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\AIFusion</code></li>
+</ul>
+<p>To stop billing, cancel from <a href="https://fusion.adam.new/billing">https://fusion.adam.new/billing</a> before uninstalling — uninstalling the add-in alone does not cancel a subscription.</p>
+
+<h2>Help</h2>
+<ul>
+  <li>Install / sign-in / billing: <a href="https://fusion.adam.new">https://fusion.adam.new</a></li>
+  <li>Live support: <a href="https://discord.com/invite/HKdXDqAHCs">Discord</a></li>
+  <li>Privacy policy: <a href="https://fusion.adam.new/privacy">https://fusion.adam.new/privacy</a></li>
+  <li>Terms: <a href="https://fusion.adam.new/terms">https://fusion.adam.new/terms</a></li>
+</ul>
+
+</body>
+</html>
