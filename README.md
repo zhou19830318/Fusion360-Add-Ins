@@ -198,4 +198,3 @@ This project is licensed under the MIT License. See `LICENSE` for details.
 
 ---
 
-**Built with [text-to-cad](https://github.com/earthtojake/text-to-cad) workflow patterns for reliable CAD generation.**
