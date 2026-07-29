@@ -2,6 +2,10 @@
 
 AI Fusion is a **native Fusion 360 add-in** that embeds a docked AI chat palette directly inside Fusion. Describe what you want to build in natural language — the AI drives the Fusion API to create sketches, extrusions, fillets, shells, holes, patterns, assemblies, and more.
 
+## Demo Video
+Click the link below to view the AI Fusion demo:
+[c25926637e665985cc7f7c9c3a4c6ff0.mp4](https://github.com/zhou19830318/AIFusion/blob/main/c25926637e665985cc7f7c9c3a4c6ff0.mp4)
+
 ## Features
 
 - **Docked chat palette** — AI copilot lives inside Fusion, no browser tab needed
