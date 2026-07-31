@@ -1,9 +1,9 @@
 # Fusion360-Add-Ins — AI Copilot for Autodesk Fusion 360
 
-Fusion360-Add-Ins is a **native Fusion 360 add-in** that embeds a docked AI chat palette directly inside Fusion. Describe what you want to build in natural language — the AI drives the Fusion API to create sketches, extrusions, fillets, shells, holes, patterns, assemblies, and more.
+Fusion360-Add-Ins is a **native Fusion 360 add-in** that embeds a docked AI chat palette directly inside Fusion. Describe what you want to build in natural language — the AI drives the Fusion API[...]
 
 ## Demo Video
-Click the link below to view the AI Fusion demo:
+Click the link below to view the Fusion360-Add-Ins demo:
 [c25926637e665985cc7f7c9c3a4c6ff0.mp4](https://github.com/zhou19830318/Fusion360-Add-Ins/blob/main/c25926637e665985cc7f7c9c3a4c6ff0.mp4)
 
 ## Features
@@ -92,7 +92,7 @@ Open `local_server\config.json` and add at least one API key:
 1. Fully quit Fusion 360 and restart
 2. Press `Shift+S` → **Add-Ins** tab → find **Fusion360-Add-Ins**
 3. Click **Run**, then tick **Run on Startup**
-4. The AI Fusion panel appears docked on the right side
+4. The Fusion360-Add-Ins panel appears docked on the right side
 
 ## Project Structure
 
@@ -135,7 +135,7 @@ Fusion360-Add-Ins/
 
 ## Switching Providers
 
-After opening the AI Fusion panel:
+After opening the Fusion360-Add-Ins panel:
 1. Click the ⚙ badge in the header → Settings panel opens
 2. Select a provider from the dropdown (DeepSeek, Kimi, Zhipu GLM, OpenAI, Anthropic Claude, Google Gemini)
 3. Select a model from the model dropdown
@@ -163,11 +163,11 @@ Run `install_deps.bat` as Administrator. Fusion's Python is minimal and has no p
 
 ### I configured a different key but Fusion still uses the old one
 
-There may be a `DEEPSEEK_API_KEY` (or similar) environment variable overriding the config file. Remove it from your system environment variables, or the new server code (v1.0+) prioritizes `config.json` over environment variables.
+There may be a `DEEPSEEK_API_KEY` (or similar) environment variable overriding the config file. Remove it from your system environment variables, or the new server code (v1.0+) prioritizes `confi[...]
 
 ### The model draws incorrectly or crashes
 
-AI Fusion's system prompt contains verified Fusion API signatures for 15 operations. If you encounter an error:
+Fusion360-Add-Ins' system prompt contains verified Fusion API signatures for 15 operations. If you encounter an error:
 1. Check the `aifusion_debug.log` file for the exact API error
 2. The repair loop in the system prompt covers 7 common failure patterns
 3. File an issue on GitHub with the log excerpt
@@ -190,7 +190,7 @@ AI Fusion's system prompt contains verified Fusion API signatures for 15 operati
 
 ## Contributing
 
-Contributions welcome. The `.pyc` files in `bridge/` and `handlers/` are compiled from the original AI Fusion release and handle the Fusion API bridge. The `local_server/` directory (server.py, chat_ui.html, config.json) is the editable layer where most optimization work happens.
+Contributions welcome. The `.pyc` files in `bridge/` and `handlers/` are compiled from the original Fusion360-Add-Ins release and handle the Fusion API bridge. The `local_server/` directory (server.py, c[...]
 
 ## License
 
