@@ -8,20 +8,20 @@ AI Fusion is a **native Fusion 360 add-in** that embeds a docked AI chat palette
 - **6 AI providers** — DeepSeek, Kimi, Zhipu GLM, OpenAI, Anthropic Claude, Google Gemini
 - **Automatic provider detection** — if exactly one API key is configured, it's selected automatically
 - **Verified API knowledge base** — 15 Fusion API operations with exact signatures embedded in the system prompt, eliminating guesswork
-- **Model aliases** — type `opus4.8`, `fable`, `gpt5.6` or `gemini3.6-flash` and the server maps them to real model IDs
+- **Model aliases** — type `sonnet5`, `fable`, `gpt5.6` or `gemini-3.7` and the server maps them to real model IDs
 - **Auto-dependency install** — missing Python packages (flask, requests) are installed automatically on first launch
 - **All operations in-process** — Fusion API calls stay on your machine; only the chat protocol leaves your machine
 
 ## Supported AI Providers
 
-| Provider | API Format | Key Models |
+| Provider | API Format | Key Models (最新旗舰, 2026-08) |
 |----------|-----------|------------|
-| **DeepSeek** | OpenAI-compatible | deepseek-v4-flash, v4-pro, chat, reasoner |
-| **Kimi (Moonshot)** | OpenAI-compatible | moonshot-v1-auto, 8k, 32k, 128k |
-| **Zhipu GLM** | OpenAI-compatible | glm-4-plus, glm-4-flash, glm-4, glm-4-air |
-| **OpenAI** | OpenAI-compatible | gpt-4o, gpt-4-turbo, gpt-5, o3-mini |
-| **Anthropic Claude** | Native Messages API | claude-opus-4, claude-sonnet-4, claude-3-5-haiku |
-| **Google Gemini** | OpenAI-compatible | gemini-2.5-flash, gemini-2.5-pro |
+| **DeepSeek** | OpenAI-compatible | deepseek-v4-pro, deepseek-v4-flash |
+| **Kimi (Moonshot)** | OpenAI-compatible | kimi-k3 |
+| **Zhipu GLM** | OpenAI-compatible | glm-5.3 |
+| **OpenAI** | OpenAI-compatible | gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna |
+| **Anthropic Claude** | Native Messages API | claude-sonnet-5, claude-fable-5 |
+| **Google Gemini** | OpenAI-compatible | gemini-3.7-flash |
 
 ## System Requirements
 

@@ -1,7 +1,7 @@
 {
   "provider": "deepseek",
   "model": "deepseek-v4-flash",
-  "deepseek_api_key": "",
+  "deepseek_api_key": "***5b70",
   "deepseek_base_url": "https://api.deepseek.com",
   "kimi_api_key": "",
   "kimi_base_url": "https://api.moonshot.cn/v1",

@@ -314,7 +314,7 @@ def do(comp, sk, z0, z1, op, bodies=None):
 |---|------|------|----------|
 | 1 | `ERR_CONNECTION_REFUSED` | Flask 未启动 (pip 没有 flask) | `ensurepip.bootstrap()` + `pip install flask requests` |
 | 2 | `ModuleNotFoundError: local_server` | sys.path 不含插件目录 | `sys.path.insert(0, addin_root)` |
-| 3 | `ai provider 400` | deepseek-chat 已废弃 | 改用 `deepseek-v4-flash` |
+| 3 | `ai provider 400` | 配置了已停用的旧模型名（如 deepseek-chat、gpt-4o、moonshot-v1 等） | 改用最新旗舰模型（如 `deepseek-v4-pro` / `deepseek-v4-flash`、`glm-5.3`、`gpt-5.6-sol`、`claude-sonnet-5`、`gemini-3.7-flash`） |
 | 4 | `unknown tool: None` | JS 发了 `{tool_name:...}` 但 bridge 取 `{name:...}` | 改为 `{name: toolName}` |
 | 5 | `execute script requires non-empty object.script` | JS 发了 `{script:...}` 但 handle 取 `object.script` | 改为 `{object: {script: ...}}` |
 | 6 | CUT 操作 health=1 失败 | participantBodies 指向旧 body 引用 | CUT 时不传 participantBodies |

@@ -6,7 +6,7 @@ Supports 6 providers with automatic format adaptation:
     - DeepSeek, Kimi (Moonshot), Zhipu GLM, OpenAI, Google Gemini (via OpenAI compat layer)
 
   Anthropic Messages API (HTTP POST /v1/messages):
-    - Claude Opus 4.8, Opus 5.0, Fable  — uses a built-in format adapter
+    - Claude Sonnet 5 / Fable 5  — uses a built-in format adapter
 
 Architecture:
   chat_ui.html  →  POST /api/chat  {messages, tools, model, provider}
@@ -134,7 +134,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "label": "DeepSeek",
         "api_format": "openai",
         "base_url": "https://api.deepseek.com",
-        "models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
+        "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
         "config_key": "deepseek_api_key",
         "auth_style": "bearer",
     },
@@ -142,7 +142,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "label": "Kimi (Moonshot)",
         "api_format": "openai",
         "base_url": "https://api.moonshot.cn/v1",
-        "models": ["moonshot-v1-auto", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+        "models": ["kimi-k3"],
         "config_key": "kimi_api_key",
         "auth_style": "bearer",
     },
@@ -150,7 +150,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "label": "Zhipu GLM",
         "api_format": "openai",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
-        "models": ["glm-4-plus", "glm-4-flash", "glm-4", "glm-4-air", "glm-4-long"],
+        "models": ["glm-5.3"],
         "config_key": "zhipu_api_key",
         "auth_style": "bearer",
     },
@@ -158,7 +158,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "label": "OpenAI",
         "api_format": "openai",
         "base_url": "https://api.openai.com/v1",
-        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "o3-mini", "o4-mini"],
+        "models": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
         "config_key": "openai_api_key",
         "auth_style": "bearer",
     },
@@ -166,12 +166,7 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "label": "Anthropic Claude",
         "api_format": "anthropic",
         "base_url": "https://api.anthropic.com",
-        "models": [
-            "claude-opus-4-20250514",
-            "claude-sonnet-4-20250514",
-            "claude-3-5-haiku-latest",
-            "claude-3-5-sonnet-latest",
-        ],
+        "models": ["claude-sonnet-5", "claude-fable-5"],
         "config_key": "anthropic_api_key",
         "auth_style": "x-api-key",
         "api_version": "2023-06-01",  # Anthropic API version header
@@ -180,28 +175,25 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "label": "Google Gemini",
         "api_format": "openai",
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "models": [
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-2.0-flash",
-        ],
+        "models": ["gemini-3.7-flash"],
         "config_key": "google_api_key",
         "auth_style": "bearer",
     },
 }
 
-# Aliases for model IDs that users might type (e.g., "opus4.8" → "claude-opus-4-20250514")
+# Aliases for model IDs that users might type (friendly names → real API IDs)
 _MODEL_ALIASES: dict[str, str] = {
-    "opus4.8": "claude-opus-4-20250514",
-    "opus-4.8": "claude-opus-4-20250514",
-    "opus5.0": "claude-sonnet-4-20250514",
-    "opus-5.0": "claude-sonnet-4-20250514",
-    "fable": "claude-3-5-haiku-latest",
-    "glm-5.2": "glm-4-plus",
-    "gpt5.6": "gpt-5",
-    "gpt-5.6": "gpt-5",
-    "gemini3.6-flash": "gemini-2.5-flash",
-    "gemini-3.6-flash": "gemini-2.5-flash",
+    # ── Anthropic Claude ──
+    "sonnet5": "claude-sonnet-5",
+    "sonnet-5": "claude-sonnet-5",
+    "fable": "claude-fable-5",
+    # ── OpenAI ──
+    "gpt5.6": "gpt-5.6-sol",
+    "gpt-5.6": "gpt-5.6-sol",
+    "gpt-5.6-sol": "gpt-5.6-sol",
+    # ── Google Gemini ──
+    "gemini3.7": "gemini-3.7-flash",
+    "gemini-3.7": "gemini-3.7-flash",
 }
 
 
