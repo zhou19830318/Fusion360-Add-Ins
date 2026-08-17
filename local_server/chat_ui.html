@@ -166,6 +166,20 @@
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Attachments ── */
+  .attach-controls { display: flex; align-items: center; gap: 8px; padding: 4px 4px 2px; }
+  .attach-btn { background: var(--panel2, #2a2f3a); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; padding: 3px 10px; cursor: pointer; }
+  .attach-btn:hover { border-color: var(--accent, #4c8dff); }
+  .attach-count { font-size: 11px; color: var(--text2); }
+  .attach-preview { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; }
+  .attach-chip { display: flex; align-items: center; gap: 6px; background: var(--panel2, #2a2f3a); border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; max-width: 200px; }
+  .attach-chip img { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; background: #fff; }
+  .attach-chip .file-ic { font-size: 18px; }
+  .attach-chip .name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .attach-chip .rm { cursor: pointer; font-size: 12px; color: var(--text2); border: 0; background: transparent; padding: 0 2px; }
+  .attach-chip .rm:hover { color: var(--error, #e5484d); }
+  .badge-attach { display: inline-block; background: var(--panel2, #2a2f3a); border: 1px solid var(--border); border-radius: 6px; font-size: 11px; padding: 1px 6px; margin-right: 6px; }
 </style>
 </head>
 <body>
@@ -192,6 +206,12 @@
 
   <div id="input-area">
     <form id="chat-form" autocomplete="off">
+      <div id="attach-preview" class="attach-preview"></div>
+      <div class="attach-controls">
+        <button type="button" id="attach-btn" class="attach-btn" title="添加附件（图片或 PDF，单张 ≤8MB，最多 4 个）">📎 附件</button>
+        <span id="attach-count" class="attach-count"></span>
+        <input type="file" id="attach-input" accept="image/*,.pdf" multiple hidden />
+      </div>
       <textarea id="prompt" rows="1" placeholder="Describe what you want to do..." spellcheck="false"></textarea>
       <button id="send-btn" type="submit" title="Send (Enter)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -224,6 +244,11 @@
 
     <label>Base URL</label>
     <input type="text" id="cfg-baseurl" placeholder="https://..." />
+
+    <label>
+      <input type="checkbox" id="cfg-vision-check" checked />
+      设计完成后自动截图视觉校验
+    </label>
 
     <label>System Prompt</label>
     <textarea id="cfg-system-prompt" placeholder="System instructions for the AI..." rows="4"></textarea>
@@ -262,6 +287,22 @@
   let conversation = [];
   let isProcessing = false;
   let providersMeta = {};  // fetched from /api/models
+  let attachments = [];    // {name, mime, dataUrl, size}
+  const ATTACH_MAX = 4;
+  const ATTACH_MAX_BYTES = 8 * 1024 * 1024;
+
+  // ── Vision check (screenshot → multimodal verification) ──
+  const VISION_MAX_ROUNDS = 3;
+  const VISION_CHECK_PROMPT = `你拿到的是 Fusion 当前设计的视口截图，请进行视觉粗校验。对照用户最初的设计要求和你此前给出的 CAD BRIEF（尺寸、特征、外观），检查：
+1. 几何形态与预期是否一致（有无多余或缺失的特征，比例是否明显失调）；
+2. 实体是否完整、位置是否正确；
+3. 是否需要修复优化。
+
+结论必须二选一：
+- 基本符合预期 → 直接输出最终总结（包含尺寸、特征清单、验证结果）；
+- 不符合 → 说明具体问题，继续用 execute 工具修复模型（修复后模型会再次截图校验，最多 ${VISION_MAX_ROUNDS} 轮）。
+
+只依据截图与已执行的建模记录判断，不要凭空猜测尺寸。`;
 
   // ── API ──
   const API_BASE = window.location.origin;
@@ -273,6 +314,90 @@
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
     return data;
+  }
+
+  // ── Vision helpers ──
+  function modelSupportsVision(pid, model) {
+    const pmeta = providersMeta[pid];
+    if (!pmeta) return false;
+    if (pmeta.vision_all) return true;
+    return (pmeta.vision_models || []).includes(model);
+  }
+  function visionCheckEnabled() {
+    const el = document.getElementById("cfg-vision-check");
+    return !el || el.checked;
+  }
+  function isScreenshotResult(r) {
+    return r && typeof r === "object" && !Array.isArray(r) &&
+           r.type === "image" && typeof r.mimeType === "string" &&
+           typeof r.data === "string" && r.data.length > 0;
+  }
+  function buildVisionCheckMessage(r) {
+    return [
+      { type: "text", text: VISION_CHECK_PROMPT },
+      { type: "image_url", image_url: { url: `data:${r.mimeType};base64,${r.data}` } },
+    ];
+  }
+
+  // ── Attachments (user-provided images/PDFs as reference) ──
+  function handleAttachFiles(fileList) {
+    const files = Array.from(fileList || []);
+    for (const f of files) {
+      const isImg = /^image\/(png|jpe?g|webp|gif)$/i.test(f.type);
+      const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+      if (!isImg && !isPdf) { alert(`附件 "${f.name}" 类型不支持（仅图片/PDF）`); continue; }
+      if (f.size > ATTACH_MAX_BYTES) { alert(`附件 "${f.name}" 超过 8MB，已跳过`); continue; }
+      if (attachments.length >= ATTACH_MAX) { alert(`附件最多 ${ATTACH_MAX} 个`); break; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        attachments.push({ name: f.name, mime: isPdf ? "application/pdf" : f.type, dataUrl: reader.result, size: f.size });
+        renderAttachments();
+      };
+      reader.readAsDataURL(f);
+    }
+  }
+
+  function renderAttachments() {
+    const box = document.getElementById("attach-preview");
+    const cnt = document.getElementById("attach-count");
+    if (!box) return;
+    box.innerHTML = "";
+    attachments.forEach((a, i) => {
+      const chip = document.createElement("div");
+      chip.className = "attach-chip";
+      const isImg = (a.mime || "").startsWith("image/");
+      chip.innerHTML = `${isImg ? `<img src="${a.dataUrl}" alt="">` : '<span class="file-ic">📄</span>'}
+        <span class="name" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</span>
+        <button class="rm" title="移除">✕</button>`;
+      chip.querySelector(".rm").onclick = () => { attachments.splice(i, 1); renderAttachments(); };
+      box.appendChild(chip);
+    });
+    if (cnt) cnt.textContent = attachments.length ? `${attachments.length}/${ATTACH_MAX}` : "";
+  }
+
+  function clearAttachments() { attachments = []; renderAttachments(); }
+
+  // 附件 → 发送给模型的 user content（OpenAI 多模态格式数组 / 纯文本）
+  function buildUserMessageContent(userText) {
+    if (!attachments.length) return userText;
+    const [prov, model] = modelBadge.dataset.active ? modelBadge.dataset.active.split("/") : [null, null];
+    if (!modelSupportsVision(prov, model)) {
+      const names = attachments.map(a => a.name).join("、");
+      return `${userText}\n\n[附件提示] 用户附带了 ${attachments.length} 个附件（${names}），但当前模型 ${model || "未知"} 不支持图片输入，附件内容未发送。如需让 AI 查看图片，请切换到支持视觉的模型（Kimi K3 / GPT-5.6 / Claude Sonnet 5 / Gemini 3.7 Flash）。`;
+    }
+    return [
+      ...attachments.map(a => ({ type: "image_url", image_url: { url: a.dataUrl } })),
+      { type: "text", text: userText },
+    ];
+  }
+
+  function renderUserBubble(userText) {
+    let html = escapeHtml(userText && userText.trim() ? userText : "(仅附件)");
+    if (attachments.length) {
+      const chips = attachments.map(a => `<span class="badge-attach">📎 ${escapeHtml(a.name)}</span>`).join("");
+      html += `<br>${chips}`;
+    }
+    return html;
   }
 
   // ── Fusion bridge ──
@@ -327,6 +452,31 @@
   function hideEmptyState() { if (emptyState) emptyState.style.display = "none"; }
   function setStatus(t) { statusEl.textContent = t; statusEl.classList.add("visible"); }
   function clearStatus() { statusEl.classList.remove("visible"); }
+
+  // ── Thinking 计时(任何等待状态都显示已耗时, 避免"看起来卡死")──
+  let thinkBase = "";
+  let thinkStart = 0;
+  let thinkTimer = null;
+  function setThinking(base) {
+    clearThinkingTimer();
+    thinkBase = base;
+    thinkStart = Date.now();
+    updateThinking();
+    thinkTimer = setInterval(updateThinking, 5000);
+  }
+  function updateThinking() {
+    const secs = ((Date.now() - thinkStart) / 1000) | 0;
+    setStatus(`${thinkBase}… ${secs}s`);
+  }
+  function clearThinkingTimer() {
+    if (thinkTimer) { clearInterval(thinkTimer); thinkTimer = null; }
+  }
+  function clearThinking() {
+    clearThinkingTimer();
+    thinkBase = "";
+    thinkStart = 0;
+    clearStatus();
+  }
   function escapeHtml(s) {
     if (!s) return "";
     const d = document.createElement("div");
@@ -395,13 +545,24 @@
 
   // ── Conversation ──
   async function sendMessage(userText) {
-    if (isProcessing || !userText.trim()) return;
+    if (!userText.trim()) return;
+    if (isProcessing) {
+      statusEl.textContent = "⏳ 上一条任务仍在处理中，请等待完成…";
+      statusEl.classList.add("visible");
+      if (thinkTimer) { thinkStart = Date.now(); updateThinking(); }
+      return;
+    }
+    const [curProv, curModel] = modelBadge.dataset.active ? modelBadge.dataset.active.split("/") : [null, null];
+    if (attachments.length && !modelSupportsVision(curProv, curModel)) {
+      alert("当前模型不支持图片输入，附件将不会发送给 AI。建议切换到支持视觉的模型（Kimi K3 / GPT-5.6 / Claude Sonnet 5 / Gemini 3.7 Flash），或仅回复文本。");
+    }
     isProcessing = true;
     sendBtn.disabled = true;
-    setStatus("Thinking...");
+    setThinking("Thinking");
 
-    conversation.push({ role: "user", content: userText });
-    addMessageEl("user", escapeHtml(userText));
+    conversation.push({ role: "user", content: buildUserMessageContent(userText) });
+    addMessageEl("user", renderUserBubble(userText));
+    if (attachments.length) clearAttachments();
 
     try {
       await runConversationLoop();
@@ -409,7 +570,7 @@
       console.error("[aifusion]", err);
       addMessageEl("assistant", `<span style="color:var(--error)">Error: ${escapeHtml(err.message)}</span>`);
     } finally {
-      clearStatus();
+      clearThinking();
       isProcessing = false;
       sendBtn.disabled = false;
       promptEl.focus();
@@ -418,7 +579,9 @@
 
   async function runConversationLoop() {
     const MAX_ROUNDS = 10;
+    let verifyRounds = 0;
     for (let round = 0; round < MAX_ROUNDS; round++) {
+      setThinking(`Thinking (第 ${round + 1}/${MAX_ROUNDS} 轮)`);
       // Read current provider/model from badge for each API call
       const [prov, model] = modelBadge.dataset.active
         ? modelBadge.dataset.active.split("/")
@@ -450,7 +613,7 @@
           let args;
           try { args = JSON.parse(tc.function.arguments || "{}"); } catch { args = {}; }
 
-          setStatus(`Running ${toolName}...`);
+          setThinking(`Running ${toolName}`);
           const thinkingEl = addThinkingEl(`Running ${toolName}...`);
 
           let result, isError = false;
@@ -460,14 +623,26 @@
           thinkingEl.remove();
           addToolCallEl(toolName, args, result, isError);
 
+          const shot = isScreenshotResult(result);
           conversation.push({
             role: "tool",
             tool_call_id: tc.id,
             name: toolName,
-            content: typeof result === "string" ? result : JSON.stringify(result),
+            // 截图 base64 不直接塞进 tool 消息(体积大且会污染纯文本模型), 仅保留摘要
+            content: shot
+              ? `[screenshot captured: ${result.mimeType}, base64 ${result.data.length} chars]`
+              : (typeof result === "string" ? result : JSON.stringify(result)),
           });
+
+          // 视觉校验:截图结果 → 以带图 user 消息注入(仅视觉模型, 且限制轮数)
+          if (shot && modelSupportsVision(prov, model) && visionCheckEnabled() &&
+              verifyRounds < VISION_MAX_ROUNDS) {
+            verifyRounds++;
+            conversation.push({ role: "user", content: buildVisionCheckMessage(result) });
+            addMessageEl("assistant", `<div style="color:var(--text2);font-size:11px;font-style:italic">🔍 已获取设计截图，模型开始视觉校验（${verifyRounds}/${VISION_MAX_ROUNDS}）…</div>`);
+          }
         }
-        setStatus("Thinking...");
+        setThinking("Thinking");
         continue;
       }
 
@@ -514,9 +689,12 @@
     if (!pmeta) { row.innerHTML = ""; return; }
 
     const configured = pmeta.configured;
+    const visionOK = modelSupportsVision(pid, document.getElementById("cfg-model").value || (pmeta.models || [])[0]) && visionCheckEnabled();
     row.innerHTML = `
       <span class="dot ${configured ? 'ok' : 'missing'}"></span>
       <span>${configured ? 'API key configured ✓' : 'No API key set — enter key below'}</span>
+      ${visionOK ? '<span class="vision-badge">👁️ 支持视觉校验</span>'
+                 : '<span class="vision-badge dim">视觉校验不可用（当前模型/开关）</span>'}
     `;
   }
 
@@ -651,6 +829,22 @@
   // ── Init ──
   async function init() {
     try {
+      // Restore vision-check toggle from localStorage
+      const vc = document.getElementById("cfg-vision-check");
+      if (vc) vc.checked = localStorage.getItem("aifusion_vision") !== "0";
+      vc?.addEventListener("change", () => {
+        localStorage.setItem("aifusion_vision", vc.checked ? "1" : "0");
+        updateProviderInfoRow();
+      });
+      document.getElementById("cfg-model")?.addEventListener("change", () => updateProviderInfoRow());
+
+      // Attachment controls
+      document.getElementById("attach-btn")?.addEventListener("click", () => document.getElementById("attach-input")?.click());
+      document.getElementById("attach-input")?.addEventListener("change", (e) => {
+        handleAttachFiles(e.target.files);
+        e.target.value = "";
+      });
+
       const modelsInfo = await apiCall("GET", "/api/models");
       providersMeta = modelsInfo.providers || {};
 

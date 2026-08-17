@@ -6,6 +6,7 @@ The local Flask server runs inside Fusion's Python process in a daemon thread.
 Flask + requests are auto-installed via pip on first run.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -95,13 +96,49 @@ def show_error(title: str, detail: str) -> None:
 _REQUIRED_MODULES = ["flask", "requests"]
 
 
+def _add_real_python_site_paths(python_exe: str) -> None:
+    """把真实 Python 的 site-packages 注入当前进程 sys.path。
+
+    pip 安装的模块默认进入该 Python 的 site-packages;Fusion 嵌入式
+    Python 并不共享该路径,必须显式加入 sys.path 才能 import。
+    """
+    try:
+        r = subprocess.run(
+            [python_exe, "-c",
+             "import site,json;"
+             "print(json.dumps(site.getsitepackages()));"
+             "print(json.dumps(site.getusersitepackages()))"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode != 0:
+            return
+        for line in (ln.strip() for ln in r.stdout.splitlines() if ln.strip()):
+            try:
+                paths = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(paths, str):
+                paths = [paths]
+            for p in paths:
+                if os.path.isdir(p) and p not in sys.path:
+                    sys.path.insert(0, p)
+                    log(f"site-packages added to path: {p}")
+    except Exception as exc:
+        log(f"site-path detect failed: {exc}")
+
+
 def _ensure_dependencies() -> bool:
+    # 先尝试把真实 Python 的 site-packages 挂进当前进程,
+    # 复用已有安装(如 install_deps.bat 或历史 pip 安装过的模块)。
+    python_exe = _find_real_python()
+    if python_exe:
+        _add_real_python_site_paths(python_exe)
+
     missing = [m for m in _REQUIRED_MODULES if not _try_import(m)]
     if not missing:
         return True
 
     log(f"Missing: {', '.join(missing)} — auto-installing …")
-    python_exe = _find_real_python()
     if not python_exe:
         show_error("Python Not Found",
             "Run: pip install flask requests\nThen restart the add-in.")
@@ -114,8 +151,16 @@ def _ensure_dependencies() -> bool:
                 capture_output=True, text=True, timeout=120,
             )
             if result.returncode == 0:
-                log(f"Installed: {', '.join(missing)}")
-                return True
+                _add_real_python_site_paths(python_exe)
+                # 装完必须在本进程重新验证——pip 装到真实 Python,
+                # Fusion 嵌入式解释器要靠注入的 site-packages 才能 import
+                still_missing = [m for m in _REQUIRED_MODULES if not _try_import(m)]
+                if not still_missing:
+                    log(f"Installed: {', '.join(missing)}")
+                    return True
+                log(f"pip installed into {python_exe}, but Fusion interpreter still "
+                    f"cannot import: {', '.join(still_missing)}")
+                return False
 
             if "no module named pip" in (result.stderr or "").lower() and attempt == 0:
                 log("Bootstrap pip via ensurepip …")

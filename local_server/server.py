@@ -135,6 +135,9 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "api_format": "openai",
         "base_url": "https://api.deepseek.com",
         "models": ["deepseek-v4-pro", "deepseek-v4-flash"],
+        # DeepSeek 官方 API (api.deepseek.com) 的 messages.content 仅接受 text，
+        # 全系不支持图片输入（第三方托管平台另有多模态版本，与本配置无关）
+        "vision_models": [],
         "config_key": "deepseek_api_key",
         "auth_style": "bearer",
     },
@@ -151,6 +154,8 @@ PROVIDERS: dict[str, dict[str, Any]] = {
         "api_format": "openai",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "models": ["glm-5.3"],
+        # GLM-5.x 系列不支持图片输入（多模态仅 glm-5v-turbo）
+        "vision_models": [],
         "config_key": "zhipu_api_key",
         "auth_style": "bearer",
     },
@@ -283,6 +288,35 @@ def _resolve_model(provider_id: str, model_id: str) -> str:
     return model_id
 
 
+def _model_has_vision(prov: dict[str, Any], model: str) -> bool:
+    """模型是否支持图片输入。vision_models 未声明 = 全部支持;
+    空列表 = 全部不支持;有列表 = 仅列表内模型支持。"""
+    vm = prov.get("vision_models")
+    if vm is None:
+        return True
+    return model in set(vm)
+
+
+def _strip_unsupported_images(messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """纵深防御:把 user 消息中的图片附件替换为文本提示(供纯文本模型调用时防御 400)。"""
+    changed = 0
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        content = m.get("content")
+        if m.get("role") == "user" and isinstance(content, list):
+            parts = []
+            for p in content:
+                if isinstance(p, dict) and p.get("type") == "image_url":
+                    changed += 1
+                    parts.append({"type": "text", "text": "[图片附件已自动忽略:当前模型不支持图片输入。如需查看附件,请切换到支持视觉的模型(Kimi K3 / GPT-5.6 / Claude Sonnet 5 / Gemini 3.7 Flash)]"})
+                else:
+                    parts.append(p)
+            out.append({**m, "content": parts})
+        else:
+            out.append(m)
+    return out, changed
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # ── ANTHROPIC FORMAT ADAPTER  ─────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════
@@ -310,7 +344,31 @@ def _anthropic_convert_messages(openai_messages: list[dict[str, Any]]) -> tuple[
             continue
 
         if role == "user":
-            anthropic_msgs.append({"role": "user", "content": msg.get("content", "")})
+            content = msg.get("content", "")
+            if isinstance(content, list):
+                # OpenAI 多模态 user 消息(含 image_url) → Anthropic image blocks
+                blocks: list[dict[str, Any]] = []
+                for part in content:
+                    if not isinstance(part, dict):
+                        blocks.append({"type": "text", "text": str(part)})
+                        continue
+                    if part.get("type") == "image_url":
+                        url = (part.get("image_url") or {}).get("url", "")
+                        if url.startswith("data:"):
+                            meta, _, b64data = url.partition(",")
+                            media_type = meta[5:].split(";")[0] or "image/png"
+                            if media_type == "application/pdf":
+                                # PDF 附件 → Anthropic document block
+                                blocks.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64data}})
+                            else:
+                                blocks.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64data}})
+                        else:
+                            blocks.append({"type": "image", "source": {"type": "url", "url": url}})
+                    else:
+                        blocks.append({"type": "text", "text": part.get("text", "")})
+                anthropic_msgs.append({"role": "user", "content": blocks})
+            else:
+                anthropic_msgs.append({"role": "user", "content": content})
 
         elif role == "assistant":
             if msg.get("tool_calls"):
@@ -560,6 +618,10 @@ def create_app() -> Flask:
         # Use payload tools or default Fusion tools
         effective_tools = tools_supplied if tools_supplied is not None else FUSION_TOOLS
 
+        # 纵深防御:当前模型不支持视觉时,剥离 user 消息中的图片附件(防厂商 400)
+        if not _model_has_vision(prov, model):
+            messages, _stripped = _strip_unsupported_images(messages)
+
         try:
             if api_format == "openai":
                 status, data = _openai_compatible_call(
@@ -603,6 +665,9 @@ def create_app() -> Flask:
         providers_out: dict[str, Any] = {}
         for pid, prov in PROVIDERS.items():
             config_key = prov["config_key"]
+            # 视觉能力:未声明 vision_models = 全部模型支持;
+            # 空列表 = 全部不支持;有列表 = 仅列表内模型支持
+            vision_models = prov.get("vision_models")
             providers_out[pid] = {
                 "label": prov["label"],
                 "api_format": prov["api_format"],
@@ -610,6 +675,8 @@ def create_app() -> Flask:
                 "base_url": cfg.get(f"{pid}_base_url") or prov["base_url"],
                 "configured": bool(cfg.get(config_key) or os.environ.get(config_key.upper())),
                 "config_key": config_key,
+                "vision_all": vision_models is None,
+                "vision_models": vision_models or [],
             }
 
         configured_count = sum(1 for p in providers_out.values() if p["configured"])

@@ -1,0 +1,15 @@
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# InsCode 工具元数据
+.inscode/
+
+# 运行日志
+aifusion_debug.log
+aifusion_log.txt
+log_tail.txt
+
+# 本地配置（含 API Key，禁止入库；模板请用 config.example.json）
+local_server/config.json
