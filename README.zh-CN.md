@@ -47,7 +47,22 @@ Fusion360-Add-Ins（AI Fusion）是 **Fusion 360 原生插件**，在 Fusion 内
 
 ## 快速安装
 
-### 1. 下载
+### 方式一：一键脚本安装（推荐，小白友好）
+
+1. 从 GitHub 下载 ZIP 并解压到任意位置（如桌面）
+2. **双击 `install.bat`**
+3. 按提示**粘贴你的 DeepSeek API Key**（直接回车 = 跳过，稍后在 Fusion 面板设置里再填）
+4. 完全退出并重启 Fusion 360 → 按 `Shift+S` → **Add-Ins** → **Fusion360-Add-Ins** → **Run** → 勾选 **Run on Startup**
+
+脚本会自动完成：
+
+- 自动定位 Fusion 的 `AddIns` 目录并把插件复制过去（幂等——已安装过则自动跳过复制）
+- 检测系统 Python 并自动安装 `flask`/`requests`（插件首次启动时也会自动安装兜底）
+- 为你生成 `local_server/config.json`——无需手动编辑 JSON，也绝不改动其它文件的配置
+
+### 方式二：手动安装
+
+#### 1. 下载
 
 ```powershell
 # 从 GitHub 克隆
@@ -114,6 +129,9 @@ Fusion360-Add-Ins/
 ├── AIFusion.py                  # 插件入口（由 Fusion 加载）
 ├── AIFusion.manifest            # Fusion 插件清单
 ├── install_deps.bat             # 依赖安装脚本（运行一次）
+├── install.bat                  # 一键部署脚本（双击即可）
+├── tools/
+│   └── setup_config.ps1         # 引导式 API Key 配置（由 install.bat 调用）
 ├── .gitignore                   # 排除 config.json（API Key）、日志、缓存
 ├── resources/
 │   └── palette.html             # 加载/回退页面

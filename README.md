@@ -45,7 +45,22 @@ Click the link below to view the Fusion360-Add-Ins demo:
 
 ## Quick Install
 
-### 1. Download
+### Option A — One-click installer (recommended, beginner-friendly)
+
+1. Download the ZIP from GitHub and extract it anywhere (e.g. your Desktop)
+2. Double-click **`install.bat`**
+3. When asked, **paste your DeepSeek API Key** (or press Enter to skip and add it later in the Fusion palette settings)
+4. Fully restart Fusion 360 → `Shift+S` → **Add-Ins** → **Fusion360-Add-Ins** → **Run** → tick **Run on Startup**
+
+The script automatically:
+
+- Locates Fusion's `AddIns` folder and copies the add-in there (idempotent — if an installation already exists, it skips the copy)
+- Installs `flask`/`requests` via pip when a system Python is available (the add-in also auto-installs them on first launch)
+- Writes `local_server/config.json` for you — no manual JSON editing — and never touches anything else
+
+### Option B — Manual install
+
+#### 1. Download
 
 ```powershell
 # Clone from GitHub
@@ -112,6 +127,9 @@ Fusion360-Add-Ins/
 ├── AIFusion.py                  # Add-in entry point (loaded by Fusion)
 ├── AIFusion.manifest            # Fusion add-in manifest
 ├── install_deps.bat             # Dependency installer (run once)
+├── install.bat                  # One-click installer (double-click to deploy)
+├── tools/
+│   └── setup_config.ps1         # Guided API-key configuration (used by install.bat)
 ├── .gitignore                   # Excludes config.json (API keys), logs, caches
 ├── resources/
 │   └── palette.html             # Loading/fallback page
