@@ -2,55 +2,88 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>AI Fusion – AI Copilot — Quick Start</title>
+<title>Fusion360-Add-Ins – AI Copilot — Quick Start</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; line-height: 1.55; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; line-height: 1.55; }
   h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
   h2 { margin-top: 2rem; font-size: 1.15rem; }
   code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
   code { background: #f4f4f5; padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
   pre { background: #f4f4f5; padding: 0.75rem 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85em; }
   a { color: #2563eb; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9em; margin: 0.75rem 0; }
+  th, td { border: 1px solid #d4d4d8; padding: 0.4rem 0.6rem; text-align: left; }
+  th { background: #f4f4f5; }
+  .ok { color: #16a34a; font-weight: 600; } .no { color: #dc2626; font-weight: 600; }
   ul { padding-left: 1.25rem; }
   li { margin: 0.25rem 0; }
 </style>
 </head>
 <body>
 
-<h1>AI Fusion – AI Copilot</h1>
-<p>AI copilot for Autodesk Fusion. AI Fusion adds a docked chat palette to Fusion that drives your design natively — sketching, modelling, editing features, querying the timeline — through normal conversation.</p>
+<h1>Fusion360-Add-Ins — AI Copilot</h1>
+<p>AI copilot for Autodesk Fusion 360. This add-in adds a docked chat palette to Fusion that drives your design natively — sketching, modelling, editing features, verifying results through viewport screenshots — through normal conversation with the AI provider of your choice.</p>
+
+<h2>Features</h2>
+<ul>
+  <li>Docked chat palette inside Fusion (no browser tab)</li>
+  <li><strong>6 AI providers</strong> with latest flagship models (2026-08): DeepSeek · Kimi · Zhipu GLM · OpenAI · Claude · Gemini</li>
+  <li><strong>Visual verification loop</strong> — captures the Fusion viewport and lets vision-capable models sanity-check the design (up to 3 repair rounds)</li>
+  <li><strong>Attachments</strong> — images / PDFs (≤8 MB each, max 4) as design reference</li>
+  <li>Capability-aware gating: text-only models (DeepSeek official API, GLM-5.3) degrade gracefully instead of failing</li>
+  <li>Auto-dependency install; model aliases (<code>sonnet5</code>, <code>fable</code>, <code>gpt5.6</code>, <code>gemini-3.7</code>); progress feedback with elapsed-time counter</li>
+</ul>
+
+<h2>Supported providers</h2>
+<table>
+  <tr><th>Provider</th><th>Models</th><th>Image input</th></tr>
+  <tr><td>DeepSeek</td><td>deepseek-v4-pro, deepseek-v4-flash</td><td class="no">✗ (official API text-only)</td></tr>
+  <tr><td>Kimi (Moonshot)</td><td>kimi-k3</td><td class="ok">✓</td></tr>
+  <tr><td>Zhipu GLM</td><td>glm-5.3</td><td class="no">✗</td></tr>
+  <tr><td>OpenAI</td><td>gpt-5.6-sol / terra / luna</td><td class="ok">✓</td></tr>
+  <tr><td>Anthropic Claude</td><td>claude-sonnet-5, claude-fable-5</td><td class="ok">✓</td></tr>
+  <tr><td>Google Gemini</td><td>gemini-3.7-flash</td><td class="ok">✓</td></tr>
+</table>
 
 <h2>What gets sent over the network</h2>
-<p>Your prompts and the tool calls AI Fusion runs on your behalf are sent to <code>fusion.adam.new</code> and forwarded to the model provider you've selected (Anthropic, OpenAI, or Google). Tool calls and their results — feature parameters, entity tokens, screenshots when you take them — travel the same way.</p>
-<p>AI Fusion <strong>does not</strong> read or upload your <code>.f3d</code> / <code>.f3z</code> files. All Fusion API work happens in-process inside Fusion via this add-in; only the chat protocol leaves your machine.</p>
-<p>Sign-in uses your existing Autodesk account via Autodesk Platform Services (APS) OAuth. AI Fusion requests the <code>openid</code> and <code>user-profile:read</code> scopes only — no <code>data:*</code> or <code>bucket:*</code>.</p>
+<p>Your prompts, tool calls &amp; results, and any reference images you attach are sent to the model provider you selected (and keyed). The add-in <strong>does not</strong> upload your <code>.f3d</code> / <code>.f3z</code> files — all Fusion API work happens in-process inside Fusion via <code>adsk.fusionSendData</code>; only the chat protocol leaves your machine, to <code>localhost:8765</code> → your provider's API.</p>
 
-<h2>Install / upgrade</h2>
-<p>The simplest path is the installer at <a href="https://fusion.adam.new/install">https://fusion.adam.new/install</a>. One-liners for each platform:</p>
+<h2>Install</h2>
+<p>Clone the repository into Fusion's add-in folder:</p>
+<pre>git clone https://github.com/zhou19830318/Fusion360-Add-Ins.git "%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360-Add-Ins"</pre>
+<p>Or download the ZIP from GitHub and extract to <code>%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360-Add-Ins\</code>.</p>
+<p>Dependencies (<code>flask</code>, <code>requests</code>) are auto-installed on first launch; you can install them upfront by running <code>install_deps.bat</code> as Administrator.</p>
 
-<p><strong>macOS — Terminal</strong></p>
-<pre>curl -sSL https://fusion.adam.new/install.sh | bash</pre>
+<h2>Configure API key</h2>
+<p>Edit <code>local_server\config.json</code> (local file, <strong>git-ignored</strong>) and set at least one provider key, e.g.:</p>
+<pre>{
+  "provider": "deepseek",
+  "model": "deepseek-v4-pro",
+  "deepseek_api_key": "sk-your-deepseek-key-here",
+  "openai_api_key": "",
+  "anthropic_api_key": "",
+  "google_api_key": ""
+}</pre>
+<p>Use <code>local_server/config.example.json</code> as the key-less template. Keys are obtained from each provider's platform (DeepSeek, open.bigmodel.cn, platform.openai.com, console.anthropic.com, aistudio.google.com, platform.moonshot.cn).</p>
 
-<p><strong>Windows — PowerShell</strong></p>
-<pre>irm https://fusion.adam.new/install.ps1 | iex</pre>
+<h2>Enable in Fusion 360</h2>
+<p>After install, fully quit Fusion and reopen it. In Fusion press <code>Shift+S</code> → <strong>Add-Ins</strong> tab → find <strong>Fusion360-Add-Ins</strong> → click <strong>Run</strong> and tick <strong>Run on Startup</strong>. The chat palette docks on the right side; open Settings via the ⚙ badge to pick a provider/model and enter an API key.</p>
 
-<p>After install, fully quit Fusion, reopen it, then in Fusion press <code>Shift+S</code> → <strong>Add-Ins</strong> tab → find <strong>AIFusion</strong> → click <strong>Run</strong> and tick <strong>Run on Startup</strong>. Fusion ships new add-ins disabled until you click Run once; after that it auto-loads on every launch. If you ever close the AI Fusion palette, reopen it from the <strong>Utilities</strong> tab → <strong>Add-Ins</strong> panel → <strong>AI Fusion – AI Copilot</strong> button (or rerun the add-in from <code>Shift+S</code>).</p>
-<p>Re-running the installer upgrades in place.</p>
+<h2>Security notes</h2>
+<ul>
+  <li><code>local_server/config.json</code> (API keys) is excluded from version control — never push it to a public repository.</li>
+  <li>Fusion files are never uploaded; only conversation text, tool results and your attached reference images leave the machine.</li>
+</ul>
 
 <h2>Uninstall</h2>
-<p>Quit Fusion, then remove the add-in directory:</p>
-<ul>
-  <li><strong>macOS:</strong> <code>rm -rf "$HOME/Library/Application Support/Autodesk/Autodesk Fusion 360/API/AddIns/AIFusion"</code></li>
-  <li><strong>Windows:</strong> delete <code>%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\AIFusion</code></li>
-</ul>
-<p>To stop billing, cancel from <a href="https://fusion.adam.new/billing">https://fusion.adam.new/billing</a> before uninstalling — uninstalling the add-in alone does not cancel a subscription.</p>
+<p>Quit Fusion, then delete the folder:</p>
+<pre>%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\Fusion360-Add-Ins</pre>
+<p>…and restart Fusion.</p>
 
 <h2>Help</h2>
 <ul>
-  <li>Install / sign-in / billing: <a href="https://fusion.adam.new">https://fusion.adam.new</a></li>
-  <li>Live support: <a href="https://discord.com/invite/HKdXDqAHCs">Discord</a></li>
-  <li>Privacy policy: <a href="https://fusion.adam.new/privacy">https://fusion.adam.new/privacy</a></li>
-  <li>Terms: <a href="https://fusion.adam.new/terms">https://fusion.adam.new/terms</a></li>
+  <li>Full documentation: <a href="https://github.com/zhou19830318/Fusion360-Add-Ins/blob/main/README.md">README.md</a></li>
+  <li>Issues: <a href="https://github.com/zhou19830318/Fusion360-Add-Ins/issues">GitHub Issues</a></li>
 </ul>
 
 </body>
