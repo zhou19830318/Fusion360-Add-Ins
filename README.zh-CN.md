@@ -8,10 +8,6 @@ Fusion360-Add-Ins（AI Fusion）是 **Fusion 360 原生插件**，在 Fusion 内
 
 ---
 
-## 演示视频
-
-点击下方链接观看 Fusion360-Add-Ins 演示：
-[c25926637e665985cc7f7c9c3a4c6ff0.mp4](https://github.com/zhou19830318/Fusion360-Add-Ins/blob/main/c25926637e665985cc7f7c9c3a4c6ff0.mp4)
 
 ## 功能特性
 
