@@ -4,6 +4,8 @@
 
 Fusion360-Add-Ins（AI Fusion）是 **Fusion 360 原生插件**，在 Fusion 内部嵌入一个停靠式 AI 聊天面板。用自然语言描述你要设计的内容——AI 会直接驱动 Fusion API 为你建模：草图、实体建模、特征编辑、并通过视口截图自动校验结果。
 
+[点击这里访问我的博客](https://blog.csdn.net/acldy833/article/details/163825853?sharetype=blogdetail&sharerId=163825853&sharerefer=PC&sharesource=acldy833&spm=1011.2480.3001.8118)
+
 ---
 
 ## 演示视频
