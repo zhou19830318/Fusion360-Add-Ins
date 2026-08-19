@@ -1,0 +1,1 @@
+"""intent — 自然语言 → 结构化设计意图（Intent Engine）"""

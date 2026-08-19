@@ -552,6 +552,45 @@ def _anthropic_call(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ── RELIABILITY LAYER (AI CAD 可靠性中间层) ──────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _reliability_llm_call(messages: list[dict[str, Any]], kw: dict[str, Any] | None = None) -> str:
+    """可靠性层专用 LLM 调用: 纯文本输出(不带 tools/schema 强制, 由 reliability 层
+    负责 JSON Schema 校验与自动修正重试)。返回 assistant 文本。"""
+    kw = kw or {}
+    cfg = load_config()
+    provider = (kw.get("provider") or cfg.get("provider")
+                or _auto_detect_provider(cfg) or "deepseek")
+    if provider not in PROVIDERS:
+        provider = "deepseek"
+    prov = PROVIDERS[provider]
+    model = _resolve_model(provider, kw.get("model") or cfg.get("model") or prov["models"][0])
+    api_key = (cfg.get(prov["config_key"], "") or os.environ.get(prov["config_key"].upper(), ""))
+    if not api_key:
+        raise RuntimeError(f"No API key configured for {prov['label']}")
+    base_url = cfg.get(f"{provider}_base_url") or prov["base_url"]
+    if prov["api_format"] == "openai":
+        status, data = _openai_compatible_call(
+            base_url, api_key, model, messages, tools=None, tool_choice=None, timeout=120)
+    else:
+        status, data = _anthropic_call(
+            base_url, api_key, prov.get("api_version", "2023-06-01"),
+            model, messages, tools=None, timeout=120)
+    if status != 200:
+        try:
+            detail = json.dumps(data)[:500]
+        except Exception:
+            detail = str(data)[:500]
+        raise RuntimeError(f"{prov['label']} returned {status}: {detail}")
+    try:
+        content = data["choices"][0]["message"].get("content") or ""
+    except (KeyError, IndexError):
+        raise RuntimeError("LLM 响应缺少 choices[0].message.content")
+    return content
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ── FLASK APPLICATION  ────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -561,10 +600,39 @@ def create_app() -> Flask:
 
     app = Flask(__name__, static_folder=str(_DIR))
 
+    # ── reliability blueprint（AI CAD 可靠性中间层, 需求 §13 的 MVP 子集）──
+    # 注意: 注册失败必须落盘(旧代码曾静默吞错导致 404 排查困难)
+    _RELIABILITY_ERROR_LOG = _DIR / "aifusion_reliability_error.log"
+    try:
+        from reliability.api.blueprint import make_reliability_blueprint
+        app.register_blueprint(
+            make_reliability_blueprint(llm_caller=_reliability_llm_call))
+        try:
+            with open(_RELIABILITY_ERROR_LOG, "a", encoding="utf-8") as _fh:
+                _fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] reliability blueprint registered OK\n")
+        except Exception:
+            pass
+    except Exception as _rlexc:  # 不影响主对话功能, 但必须可见
+        try:
+            import traceback as _tb
+            with open(_RELIABILITY_ERROR_LOG, "a", encoding="utf-8") as _fh:
+                _fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] reliability INIT FAILED:\n")
+                _fh.write(_tb.format_exc())
+                _fh.write("\n")
+        except Exception:
+            pass
+        import sys as _sys
+        _sys.stderr.write(f"[reliability] blueprint init failed: {_rlexc}\n")
+
     # ── /chat ──
     @app.route("/chat")
     def chat_ui():
         return send_from_directory(str(_DIR), "chat_ui.html")
+
+    # ── logo 静态资源(chat_ui 头部引用) ──
+    @app.route("/static/<path:filename>")
+    def static_files(filename):
+        return send_from_directory(str(_DIR), filename)
 
     # ── /api/chat (multi-provider routing) ──
     @app.route("/api/chat", methods=["POST"])

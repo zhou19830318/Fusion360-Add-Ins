@@ -37,6 +37,7 @@ _MAX_LOG_BYTES = 500_000  # rotate debug log at ~500 KB
 
 _handlers: list = []
 _server_thread: threading.Thread | None = None
+_httpd: object | None = None  # werkzeug BaseWSGIServer（供 _stop_server 真正关闭）
 
 # =========================================================================
 # Logging (with rotation)
@@ -237,10 +238,26 @@ def _server_running() -> bool:
         return False
 
 
+def _server_has_reliability() -> bool:
+    """探测当前端口上的服务器是否已加载可靠性层（区分新旧实例）。"""
+    import urllib.request
+    try:
+        urllib.request.urlopen(urllib.request.Request(
+            f"http://127.0.0.1:{_SERVER_PORT}/api/reliability/ping", method="GET"),
+            timeout=1)
+        return True
+    except Exception:
+        return False
+
+
 def _start_server() -> bool:
     global _server_thread
     if _server_running():
-        log("Server already running.")
+        if not _server_has_reliability():
+            log("端口 8765 已被【旧版本】服务器占用（无 reliability 路由）。"
+                "插件 stop 不杀 daemon 线程，请完全退出 Fusion 再重启以加载新代码。")
+        else:
+            log("Server already running (reliability ready).")
         return True
 
     if not _ensure_dependencies():
@@ -258,11 +275,15 @@ def _start_server() -> bool:
         return False
 
     def _run():
+        global _httpd
         try:
             import logging as _logging
             _log = _logging.getLogger("werkzeug")
             _log.setLevel(_logging.ERROR)  # suppress GET/POST logs
-            app.run(host="127.0.0.1", port=_SERVER_PORT, debug=False, use_reloader=False)
+            from werkzeug.serving import make_server
+            _httpd = make_server("127.0.0.1", _SERVER_PORT, app,
+                                 threaded=True)  # LLM 长请求期间不阻塞其他请求
+            _httpd.serve_forever()
         except Exception as exc:
             log(f"Flask stopped: {exc}")
 
@@ -279,7 +300,13 @@ def _start_server() -> bool:
 
 
 def _stop_server() -> None:
-    global _server_thread
+    global _server_thread, _httpd
+    if _httpd is not None:
+        try:
+            _httpd.shutdown()
+        except Exception as exc:
+            log(f"httpd shutdown error: {exc}")
+        _httpd = None
     _server_thread = None
 
 

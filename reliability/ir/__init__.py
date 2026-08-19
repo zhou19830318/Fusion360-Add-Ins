@@ -1,0 +1,1 @@
+"""ir — Intermediate Representation: DesignSpec / Parameter / Constraint / Schema"""

@@ -7,17 +7,18 @@
 <style>
   /* ===== dark theme ===== */
   :root {
-    --bg: #0b0b0e;
-    --surface: #16161a;
-    --surface2: #1e1e24;
-    --border: #2a2a34;
-    --text: #e4e4ec;
-    --text2: #9898a8;
-    --accent: #c12d9c;
-    --accent2: #fc7ab1;
-    --user-bubble: #2a1a3a;
-    --tool-bg: #12121a;
-    --tool-border: #2a2a3a;
+    /* 配色参考 AIFusion_logo.jpg（深蓝灰 #23262F 家族 + 亮蓝 accent） */
+    --bg: #10131a;
+    --surface: #171b24;
+    --surface2: #1f2430;
+    --border: #2b3140;
+    --text: #e8ecf5;
+    --text2: #9aa3b5;
+    --accent: #5b8cff;
+    --accent2: #7aa8ff;
+    --user-bubble: #1d2a44;
+    --tool-bg: #141924;
+    --tool-border: #2b3140;
     --error: #e0556a;
     --success: #4caf93;
     --radius: 10px;
@@ -38,6 +39,10 @@
 
   #app { display: flex; flex-direction: column; height: 100%; }
 
+  #header img#app-logo {
+    width: 22px; height: 22px; object-fit: cover; border-radius: 6px;
+    box-shadow: 0 0 0 1px rgba(91,140,255,.35);
+  }
   #header {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 12px; background: var(--surface);
@@ -180,20 +185,45 @@
   .attach-chip .rm { cursor: pointer; font-size: 12px; color: var(--text2); border: 0; background: transparent; padding: 0 2px; }
   .attach-chip .rm:hover { color: var(--error, #e5484d); }
   .badge-attach { display: inline-block; background: var(--panel2, #2a2f3a); border: 1px solid var(--border); border-radius: 6px; font-size: 11px; padding: 1px 6px; margin-right: 6px; }
+
+  /* ===== reliability cards (AI CAD 可靠性中间层) ===== */
+  .r-card {
+    background: #14161c; border: 1px solid #2a2e3a; border-radius: 10px;
+    padding: 10px 12px; margin: 8px 0; font-size: 12.5px; line-height: 1.5;
+  }
+  .r-title { font-weight: 700; margin-bottom: 4px; }
+  .r-sub { color: var(--text2, #99a); margin-bottom: 6px; }
+  .r-table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 12px; }
+  .r-table th, .r-table td { border: 1px solid #2a2e3a; padding: 3px 6px; text-align: left; }
+  .r-table th { background: #1c1f27; }
+  .r-btn {
+    background: var(--accent, #4a6cf7); color: #fff; border: 0; border-radius: 6px;
+    padding: 5px 10px; font-size: 12px; cursor: pointer; margin: 4px 6px 2px 0;
+  }
+  .r-btn:hover { background: var(--accent2, #3b5bdb); }
+  .r-btn.ghost { background: transparent; border: 1px solid #3a3f4d; color: #c9cdd8; }
+  .r-q { color: #e8b34b; margin-top: 6px; }
+  .r-q-item { margin: 3px 0; }
+  .r-risk-low { color: #4ade80; } .r-risk-medium { color: #facc15; } .r-risk-high { color: #f87171; }
+  .r-status-passed { color: #4ade80; font-weight: 600; }
+  .r-status-failed { color: #f87171; font-weight: 600; }
+  .r-status-paused { color: #facc15; font-weight: 600; }
+  .r-state { float: right; font-size: 11px; color: var(--text2, #99a); }
+
+  /* (移除 Tab 面板: 设计规格/参数/执行计划/验证-BOM) */
 </style>
 </head>
 <body>
 <div id="app">
   <!-- Header -->
   <div id="header">
-    <svg viewBox="0 0 3220 2871" xmlns="http://www.w3.org/2000/svg" style="width:22px;height:22px">
-      <path d="M2256.65 2484.03L2134.81 2049.39L1818.74 923.806L909.855 890.35C590.801 898.868 303.627 1035.23 222.002 1134.03C132.335 1271.65 76.9257 1406.74L65.9034 1441.46C16.1544 2070.54 193.106 2350.51C293.2 2509.6 592.291 2722.34C1159.2 2848.91 1161.28 2848.91L2312.36 2683.51L2256.05 2483.4Z" fill="#C12D9C"/>
-      <path d="M2100.58 1629.25C2065.42 1695.22 2043.68 1725.2L1818.76 923.781L910.175 890.646C1023.38 674.111 1123.17 603.407C1815.79 517.868 2034.14 863.497C2129.77 1070.56 2178.33 1466.69 2100.58 1629.56Z" fill="#C12D9C"/>
-      <path d="M3187.01 2350.84L2312.98 2684.16L2256.67 2484.05L3187.01 2350.84Z" fill="#C12D9C"/>
-    </svg>
+    <img id="app-logo" src="/static/AIFusion_logo.jpg"
+         alt="AI Fusion" title="AI Fusion — AI Copilot" />
     <span class="title">AI Fusion</span>
-    <span id="model-badge" class="badge" title="Open settings">⚙ deepseek</span>
+    <span id="model-badge" class="badge" title="Open settings">⚙ …</span>
   </div>
+
+  <div id="chat-region"></div>
 
   <div id="messages">
     <div class="empty-state" id="empty-state">
@@ -565,7 +595,7 @@
     if (attachments.length) clearAttachments();
 
     try {
-      await runConversationLoop();
+      await reliabilityFlow(userText);
     } catch (err) {
       console.error("[aifusion]", err);
       addMessageEl("assistant", `<span style="color:var(--error)">Error: ${escapeHtml(err.message)}</span>`);
@@ -576,6 +606,241 @@
       promptEl.focus();
     }
   }
+
+  // ==========================================================================
+  // 🔐 Reliability Flow — AI CAD 可靠性中间层 (MVP 渐进 UI)
+  //   Intent → 澄清 → 参数表 → Plan → 审查 → 分步执行 → 验证 → 回滚
+  // ==========================================================================
+  let relSession = null;
+  let lastSpecResp = null;
+
+  function esc(s) { return escapeHtml(String(s == null ? "" : s)); }
+  function riskCls(risk) { return "r-risk-" + (risk || "medium"); }
+
+  async function relApi(path, body, method) {
+    return await apiCall(method || "POST", "/api/reliability" + path, body);
+  }
+
+  async function reliabilityFlow(userText) {
+    addMessageEl("assistant",
+      `<div class="r-card">🔐 可靠设计模式已开启<br>正在 <b>解析设计意图</b>（LLM 结构化输出 + JSON Schema 校验；失败自动重试，最终回退规则引擎）…</div>`);
+    scrollToBottom();
+    // 会话复用: 已有会话则在原设计上下文上继续(保留已确认/锁定参数, 避免多轮澄清上下文丢失)
+    const reuse = !!relSession;
+    const sid = reuse ? relSession : (await relApi("/session", {})).session_id;
+    if (!reuse) relSession = sid;
+    let resp = null;
+    const payload = { session_id: sid, user_text: userText, use_llm: true, language: "zh-CN" };
+    if (reuse) payload.reuse_session = true;
+    try {
+      resp = await relApi("/intent/parse", payload);
+    } catch (e) {
+      payload.use_llm = false;
+      resp = await relApi("/intent/parse", payload);
+    }
+    lastSpecResp = resp;
+    renderIntentCard(resp, userText);
+  }
+
+  function defaultLabel(d) {
+    if (d == null || d === "") return "";
+    if (typeof d === "object") return (d.label || d.id || JSON.stringify(d)).toString();
+    return String(d);
+  }
+
+  function renderIntentCard(resp, userText) {
+    const spec = resp.spec || {};
+    const params = spec.parameters || [];
+    const qs = resp.questions || [];
+    let html = `<div class="r-card">
+      <div class="r-title">📋 设计规格（DesignSpec） <span class="r-state">${esc(resp.state || "")}</span></div>
+      <div class="r-sub">${esc((spec.goal && spec.goal.summary) || userText || "")}</div>`;
+    if (resp.metadata && resp.metadata.fallback) {
+      html += `<div class="r-sub" style="color:#e8b34b">⚠ LLM 结构化输出未通过校验，已回退规则引擎：${esc(JSON.stringify(resp.metadata.llm_errors || "").slice(0, 160))}</div>`;
+    }
+    if (qs && qs.length) {
+      html += `<div class="r-q">❓ 需要澄清（${qs.length} 个）：</div>`;
+      for (const q of qs) {
+        html += `<div class="r-q-item"><b>${esc(q.question)}</b><br>`;
+        const opts = (q.options && q.options.length) ? q.options : [{ id: "custom", label: "自定义" }];
+        for (const o of opts) {
+          html += `<button class="r-btn ghost" data-role="clarify" data-qid="${esc(q.id)}" data-value="${esc(o.id)}">${esc(o.label)}</button>`;
+        }
+        if (q.default != null && q.default !== "") html += ` <span style="color:#9aa;font-size:11px">默认：${esc(defaultLabel(q.default))}</span>`;
+        html += `</div>`;
+      }
+    }
+    html += `<div class="r-sub" style="margin:6px 0">假设：${esc((spec.assumptions || []).join("；") || "无")}</div>
+      <table class="r-table"><tr><th>参数</th><th>值</th><th>来源</th><th>置信度</th><th>状态</th></tr>`;
+    for (const p of params) {
+      html += `<tr><td>${esc(p.label || p.name)}<br><code>${esc(p.name)}</code></td>
+        <td>${esc(p.value)} ${esc(p.unit || "")}</td><td>${esc(p.source)}</td>
+        <td>${esc(p.confidence)}</td><td>${esc(p.status)}${p.locked ? " 🔒" : ""}</td></tr>`;
+    }
+    html += `</table>
+      <button class="r-btn" data-role="gen-plan">① 生成执行计划 →</button></div>`;
+    addMessageEl("assistant", html);
+    scrollToBottom();
+  }
+
+  async function genPlan() {
+    const resp = await relApi("/plan/generate", { session_id: relSession });
+    // 409: 存在未解决的阻断性澄清 → 引导用户继续回答(不回 raw 错误)
+    if (resp.error && /澄清/.test(resp.error)) {
+      let spec = (lastSpecResp && lastSpecResp.spec) || {};
+      try {
+        const s2 = await relApi(`/spec/${relSession}`, null, "GET");
+        if (s2 && !s2.error) spec = s2;
+      } catch (e) { /* 忽略 */ }
+      addMessageEl("assistant",
+        `<div class="r-card" style="color:#e8b34b">⚠ 还有未解决的澄清问题，请先回答：</div>`);
+      renderIntentCard({ spec, state: "CLARIFY", questions: resp.questions || [],
+                         metadata: {} }, "");
+      return;
+    }
+    const nodes = (resp.plan && resp.plan.nodes) || [];
+    let html = `<div class="r-card">
+      <div class="r-title">🗺 执行计划（Plan DAG） <span class="r-state">${esc(resp.state || "")}</span></div>`;
+    for (const n of nodes) {
+      const flag = (n.checkpoint ? " 🧷检查点" : "") + (n.requires_confirmation ? " ⚠️需确认" : "");
+      html += `<div style="margin:4px 0">${n.order}. <span class="${riskCls(n.risk)}">[${esc(n.risk)}]</span> ${esc(n.label)}${flag}
+        <div style="color:#9aa;font-size:11px">产出 ${esc((n.outputs || []).join(",") || n.type)} ｜ 验证：${esc(n.verification || "-")} ｜ 备选：${esc(n.alternative || "-")}</div></div>`;
+    }
+    html += `<button class="r-btn" data-role="approve-run">② 批准计划并执行 →</button>
+      <button class="r-btn ghost" data-role="back-spec">← 返回设计规格</button></div>`;
+    addMessageEl("assistant", html);
+    scrollToBottom();
+  }
+
+  async function approveAndRun() {
+    await relApi(`/plan/${relSession}/approve`, {});
+    const resp = await relApi(`/execution/run_all/${relSession}`, {});
+    renderExecutionCard(resp);
+  }
+
+  function renderExecutionCard(resp) {
+    const ex = resp.execution || {};
+    let html = `<div class="r-card">
+      <div class="r-title">⚙️ 分步执行结果 <span class="r-state">${esc(resp.state || "")}</span></div>
+      <div>通过：<span class="r-status-passed">${ex.passed || 0}</span> ｜ 失败：<span class="r-status-failed">${ex.failed || 0}</span></div>`;
+    for (const s of ex.summary || []) {
+      const ok = s.ok === true;
+      html += `<div>• ${esc(s.node)}：${ok ? '<span class="r-status-passed">✓ 通过</span>' : '<span class="r-status-failed">✗ 失败</span> <span style="color:#9aa;font-size:11px">' + esc(s.error || s.reason || "") + '</span>'}
+        ${s.awaiting_confirmation ? `<span class="r-status-paused">（等待确认）</span> <button class="r-btn" data-role="confirm-node" data-node="${esc(s.node)}">✓ 确认并执行</button>` : ""}</div>`;
+    }
+    if ((ex.failed || 0) > 0) {
+      html += `<button class="r-btn" data-role="retry-failed">↻ 重试失败节点</button>`;
+    }
+    html += `<button class="r-btn" data-role="validate">③ 运行验证 →</button></div>`;
+    addMessageEl("assistant", html);
+    scrollToBottom();
+  }
+
+  async function retryFailed() {
+    const resp = await relApi(`/execution/retry_failed/${relSession}`, {});
+    renderExecutionCard({ execution: resp.retry, state: resp.state });
+  }
+
+  async function runValidation() {
+    const g = await relApi(`/validate/geometry/${relSession}`, {});
+    const i = await relApi(`/validate/intent/${relSession}`, {});
+    renderValidation(g.report, i.report, g.state);
+  }
+
+  function renderValidation(geo, intent, state) {
+    const checks = (geo.checks || []).concat((intent.checks || []));
+    let html = `<div class="r-card">
+      <div class="r-title">✅ 验证报告 <span class="r-state">${esc(state || "")}｜几何 ${esc(geo.status)} ｜意图 ${esc(intent.status)}</span></div>`;
+    for (const c of checks) {
+      const cls = c.status === "passed" ? "passed" : c.status === "failed" ? "failed" : "paused";
+      html += `<div><span class="r-status-${cls}">${esc(c.status)}</span> ${esc(c.type)}：${esc(c.message)}
+        ${c.actual != null && c.actual !== "" ? ` <span style="color:#9aa;font-size:11px">(实际 ${esc(c.actual)} / 期望 ${esc(c.expected)})</span>` : ""}</div>`;
+    }
+    html += `<button class="r-btn ghost" data-role="checkpoint-list">🧷 检查点 / 回滚</button>
+      <button class="r-btn ghost" data-role="bom-view">🧾 BOM / 追溯</button></div>`;
+    addMessageEl("assistant", html);
+    scrollToBottom();
+  }
+
+  async function listCheckpoints() {
+    const s = await relApi(`/session/${relSession}`, null, "GET");
+    const cps = s.checkpoints || [];
+    let html = `<div class="r-card"><div class="r-title">🧷 检查点（回滚） <span class="r-state">状态 ${esc(s.state)}</span></div>`;
+    if (!cps.length) html += `<div style="color:#9aa">暂无检查点</div>`;
+    for (const cp of cps) {
+      html += `<div style="margin:4px 0">${esc(cp.id)} ${esc(cp.label)}
+        <button class="r-btn ghost" data-role="rollback" data-ckpt="${esc(cp.id)}">↩ 回滚到此</button></div>`;
+    }
+    html += `</div>`;
+    addMessageEl("assistant", html);
+    scrollToBottom();
+  }
+
+  // 可靠卡片按钮事件（事件委托）
+  messagesEl.addEventListener("click", async (e) => {
+    const btn = e.target.closest && e.target.closest("[data-role]");
+    if (!btn) return;
+    const role = btn.dataset.role;
+    btn.disabled = true;
+    try {
+      if (role === "clarify") {
+        const r = await relApi("/clarify/answer",
+          { session_id: relSession, answers: { [btn.dataset.qid]: btn.dataset.value } });
+        lastSpecResp = r;
+        renderIntentCard(r, "");
+      } else if (role === "gen-plan") { await genPlan(); }
+      else if (role === "approve-run") { await approveAndRun(); }
+      else if (role === "retry-failed") { await retryFailed(); }
+      else if (role === "confirm-node") {
+        // 确认点放行并执行该节点
+        const r = await relApi(`/execution/confirm/${relSession}/${btn.dataset.node}`, {});
+        const executed = r.executed || {};
+        const plan = r.plan || {};
+        const summary = executed.ok === undefined
+          ? [] : [{ node: btn.dataset.node, ok: executed.ok, error: executed.error || executed.reason }];
+        renderExecutionCard({ execution: { passed: executed.ok ? 1 : 0, failed: executed.ok ? 0 : 1, summary },
+                              state: executed.awaiting_confirmation ? "PAUSED" : "EXECUTING" });
+        if (!executed.ok && executed.awaiting_confirmation) {
+          addMessageEl("assistant", `<div class="r-card">${esc(executed.reason || "等待确认")}</div>`);
+        }
+      }
+      else if (role === "validate") { await runValidation(); }
+      else if (role === "checkpoint-list") { await listCheckpoints(); }
+      else if (role === "bom-view") {
+        const r = await relApi(`/bom/${relSession}`, null, "GET");
+        const rows = r.bom || [];
+        let h = `<div class="r-card"><div class="r-title">🧾 BOM / 追溯 <span class="r-state">${esc(r.backend || "")}</span></div>`;
+        if (!rows.length) { h += `<div style="color:#9aa">暂无实体(BOM 为空)</div>`; }
+        else {
+          h += `<table class="r-table"><tr><th>实体</th><th>体积(mm³)</th><th>质量(g)</th><th>AI属性</th></tr>`;
+          for (const row of rows) {
+            const attrs = row.attributes || {};
+            const ai = ["intent_id", "plan_node_id", "semantic_role", "created_by"]
+              .filter(k => attrs[k]).map(k => `${k}=${attrs[k]}`).join(" ");
+            h += `<tr><td>${esc(row.body_name || "")}</td><td>${esc(row.volume_mm3 ?? "-")}</td>
+              <td>${esc(row.mass_g ?? "-")}</td><td style="font-size:11px">${esc(ai || "无")}</td></tr>`;
+          }
+          h += `</table>`;
+        }
+        h += `</div>`;
+        addMessageEl("assistant", h);
+        scrollToBottom();
+      }
+      else if (role === "rollback") {
+        const r = await relApi(`/execution/rollback/${relSession}/${btn.dataset.ckpt}`, {});
+        addMessageEl("assistant", `<div class="r-card">↩️ 回滚结果：${esc(JSON.stringify(r))}</div>`);
+      }
+      else if (role === "back-spec") {
+        renderIntentCard(lastSpecResp || { spec: {}, state: "SPEC_READY", questions: [], metadata: {} }, "");
+      }
+    } catch (err) {
+      console.error("[reliability]", err);
+      addMessageEl("assistant", `<span style="color:var(--error)">可靠流程错误：${esc(err.message)}</span>`);
+    } finally {
+      btn.disabled = false;
+      // refreshTabs 已移除
+    }
+  });
 
   async function runConversationLoop() {
     const MAX_ROUNDS = 10;
@@ -861,7 +1126,10 @@
       }
 
       const pmeta = providersMeta[pid] || {};
-      const model = pmeta.models ? pmeta.models[0] : "";
+      // 徽标显示【配置中保存的模型】(而非提供商首个模型), 与设置面板一致
+      const cfgModel = window._currentModel || "";
+      const model = (pmeta.models && pmeta.models.includes(cfgModel))
+        ? cfgModel : ((pmeta.models && pmeta.models[0]) || "");
       const label = pmeta.label || pid;
       const configured = pmeta.configured || false;
 
