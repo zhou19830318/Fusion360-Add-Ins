@@ -6,10 +6,6 @@ Fusion360-Add-Ins (AI Fusion) is a **native Fusion 360 add-in** that embeds a do
 
 [Visit my blog](https://blog.csdn.net/acldy833/article/details/163825853?sharetype=blogdetail&sharerId=163825853&sharerefer=PC&sharesource=acldy833&spm=1011.2480.3001.8118)
 
-## Demo Video
-
-Click the link below to view the Fusion360-Add-Ins demo:
-[c25926637e665985cc7f7c9c3a4c6ff0.mp4](https://github.com/zhou19830318/Fusion360-Add-Ins/blob/main/c25926637e665985cc7f7c9c3a4c6ff0.mp4)
 
 ## Features
 
